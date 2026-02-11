@@ -1,0 +1,39 @@
+# Environment
+.env
+.env.local
+.env.production
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+
+# Node / Next.js
+node_modules/
+frontend/.next/
+frontend/out/
+.next/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Whisper model cache
+*.pt
+
+# Audio temp files
+*.wav
+*.mp3
+*.webm
+!backend/data/*.json
+
+# Logs
+*.log

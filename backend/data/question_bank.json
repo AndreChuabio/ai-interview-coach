@@ -1,0 +1,69 @@
+{
+  "behavioral": {
+    "leadership": [
+      "Tell me about a time you had to lead a project with minimal guidance.",
+      "Describe a situation where you had to motivate a team through a difficult period.",
+      "Give me an example of when you took initiative without being asked."
+    ],
+    "conflict": [
+      "Tell me about a time you had a disagreement with a colleague. How did you resolve it?",
+      "Describe a situation where you received harsh feedback. How did you handle it?",
+      "Give me an example of when you had to push back on a decision you disagreed with."
+    ],
+    "problem_solving": [
+      "Tell me about the most complex problem you've solved at work.",
+      "Describe a time when you had to make a decision with incomplete information.",
+      "Give me an example of when you identified a problem before anyone else noticed."
+    ],
+    "teamwork": [
+      "Tell me about a successful team project and your specific contribution.",
+      "Describe a time you had to work with someone whose style was very different from yours.",
+      "Give me an example of when you helped a struggling team member."
+    ],
+    "adaptability": [
+      "Tell me about a time when priorities changed suddenly. How did you adapt?",
+      "Describe a situation where you had to learn a new skill quickly to deliver results.",
+      "Give me an example of when a project you were working on was cancelled or significantly altered."
+    ]
+  },
+  "technical": {
+    "data_science": [
+      "Explain the bias-variance tradeoff and how it affects model selection.",
+      "How would you design an A/B test to evaluate a new recommendation algorithm?",
+      "Walk me through how you would build a fraud detection model from scratch.",
+      "Explain the difference between L1 and L2 regularization. When would you use each?",
+      "How would you handle a dataset with 90% missing values in a critical feature?"
+    ],
+    "software_engineering": [
+      "Design a URL shortener service. Walk me through the system architecture.",
+      "Explain the tradeoffs between SQL and NoSQL databases for a social media application.",
+      "How would you design a rate limiter for an API?",
+      "Walk me through how you would debug a production issue causing intermittent 500 errors.",
+      "Explain the CAP theorem and its practical implications."
+    ],
+    "sql": [
+      "Write a query to find the second highest salary in each department.",
+      "Explain the difference between INNER JOIN, LEFT JOIN, and CROSS JOIN.",
+      "How would you optimize a slow query on a table with 100 million rows?",
+      "Explain window functions and give a practical use case.",
+      "Write a query to find customers who made purchases in every month of the last year."
+    ]
+  },
+  "case_study": {
+    "market_sizing": [
+      "Estimate the annual revenue of all coffee shops in Manhattan.",
+      "How many electric vehicle charging stations will New York City need by 2030?",
+      "Estimate the total addressable market for AI-powered interview preparation tools."
+    ],
+    "profitability": [
+      "A SaaS company's margins dropped 15% despite growing revenue. Diagnose the problem.",
+      "A restaurant chain is profitable in NYC but losing money in every other market. Why?",
+      "An e-commerce company has doubled revenue but profits are flat. What do you investigate?"
+    ],
+    "strategy": [
+      "A fintech startup wants to enter the wealth management space. How should they approach this?",
+      "A streaming service is considering launching an ad-supported tier. Walk me through the analysis.",
+      "A traditional bank wants to compete with neobanks. What strategy would you recommend?"
+    ]
+  }
+}
