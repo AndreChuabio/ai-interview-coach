@@ -11,9 +11,12 @@ from backend.config import settings
 from backend.routers import interview, feedback
 
 logging.basicConfig(
-    level=logging.DEBUG if settings.debug else logging.INFO,
+    level=logging.INFO,
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
+# Suppress noisy third-party debug loggers
+for _noisy in ("numba", "httpcore", "httpx", "google_genai", "urllib3"):
+    logging.getLogger(_noisy).setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(
@@ -32,6 +35,20 @@ app.add_middleware(
 
 app.include_router(interview.router, prefix="/api/interview", tags=["interview"])
 app.include_router(feedback.router, prefix="/api/feedback", tags=["feedback"])
+
+
+@app.on_event("startup")
+async def warm_up_providers():
+    """Pre-load heavy models (Whisper) at startup so the first request is fast."""
+    try:
+        from backend.providers.factory import get_stt_provider
+        stt = get_stt_provider()
+        # Force Whisper model load now instead of on first request
+        if hasattr(stt, "_load_model"):
+            stt._load_model()
+        logger.info("STT provider ready: %s", type(stt).__name__)
+    except Exception as exc:
+        logger.warning("Failed to pre-load STT provider: %s", exc)
 
 
 @app.get("/api/health")

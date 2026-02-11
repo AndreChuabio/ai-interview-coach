@@ -129,12 +129,29 @@ export async function sendResponse(
   const formData = new FormData();
   formData.append("audio", audioBlob, "response.webm");
 
-  const res = await fetch(`${API_BASE}/interview/respond/${sessionId}`, {
-    method: "POST",
-    body: formData,
-  });
-  if (!res.ok) throw new Error(`Send response failed: ${res.status}`);
-  return res.json();
+  // Allow up to 2 minutes for STT + LLM + TTS pipeline
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 120_000);
+
+  try {
+    const res = await fetch(`${API_BASE}/interview/respond/${sessionId}`, {
+      method: "POST",
+      body: formData,
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      const detail = await res.text().catch(() => "");
+      throw new Error(`Send response failed (${res.status}): ${detail}`);
+    }
+    return res.json();
+  } catch (err: unknown) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw new Error("Response timed out. The backend may still be processing. Try again.");
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 /** Submit batched face data snapshots. */
