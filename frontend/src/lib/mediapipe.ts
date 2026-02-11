@@ -22,46 +22,77 @@ export interface FaceFrame {
 }
 
 let faceLandmarker: FaceLandmarker | null = null;
+let lastTimestampMs = -1;
+let isReady = false;
 
 /**
  * Initialize the MediaPipe FaceLandmarker.
+ * Tries GPU delegate first, falls back to CPU if unavailable.
  * Call once on component mount; subsequent calls are no-ops.
  */
 export async function initFaceLandmarker(): Promise<FaceLandmarker> {
-  if (faceLandmarker) return faceLandmarker;
+  if (faceLandmarker && isReady) return faceLandmarker;
 
   const vision = await FilesetResolver.forVisionTasks(
     "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
   );
 
-  faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
-    baseOptions: {
-      modelAssetPath:
-        "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
-      delegate: "GPU",
-    },
-    runningMode: "VIDEO",
+  const options = {
+    runningMode: "VIDEO" as const,
     numFaces: 1,
     outputFaceBlendshapes: true,
     outputFacialTransformationMatrixes: true,
-  });
+  };
 
+  // Try GPU first, fall back to CPU
+  try {
+    faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
+      baseOptions: {
+        modelAssetPath:
+          "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
+        delegate: "GPU",
+      },
+      ...options,
+    });
+  } catch {
+    console.warn("GPU delegate unavailable, falling back to CPU");
+    faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
+      baseOptions: {
+        modelAssetPath:
+          "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
+        delegate: "CPU",
+      },
+      ...options,
+    });
+  }
+
+  isReady = true;
+  lastTimestampMs = -1;
   return faceLandmarker;
 }
 
 /**
  * Process a single video frame and return facial expression data.
+ * Returns null if the model is not ready or the video frame is not available.
  */
 export function processFrame(
   video: HTMLVideoElement,
   timestampMs: number
 ): FaceFrame | null {
-  if (!faceLandmarker) return null;
+  if (!faceLandmarker || !isReady) return null;
+
+  // Video must have enough data loaded
+  if (video.readyState < 2) return null;
+
+  // MediaPipe requires strictly increasing timestamps
+  const ts = Math.max(timestampMs, lastTimestampMs + 1);
+  lastTimestampMs = ts;
 
   let result: FaceLandmarkerResult;
   try {
-    result = faceLandmarker.detectForVideo(video, timestampMs);
+    result = faceLandmarker.detectForVideo(video, ts);
   } catch {
+    // Silently skip frames that fail during warmup
     return null;
   }
 
@@ -85,12 +116,11 @@ export function processFrame(
     const matrix = result.facialTransformationMatrixes[0].data;
     // Extract approximate Euler angles from the 4x4 transformation matrix
     // matrix is stored column-major as Float32Array(16)
-    headPitch = Math.asin(-matrix[6]) * (180 / Math.PI); // rotation around X
-    headYaw = Math.atan2(matrix[2], matrix[10]) * (180 / Math.PI); // rotation around Y
+    headPitch = Math.asin(-matrix[6]) * (180 / Math.PI);
+    headYaw = Math.atan2(matrix[2], matrix[10]) * (180 / Math.PI);
   }
 
-  // Estimate eye contact: eyes are looking roughly forward
-  // Use eye look directions from blendshapes
+  // Estimate eye contact: eyes looking roughly forward
   const lookLeft =
     (shapeMap["eyeLookOutLeft"] || 0) + (shapeMap["eyeLookInRight"] || 0);
   const lookRight =
@@ -122,7 +152,7 @@ export function processFrame(
 
 /**
  * Classify emotions from MediaPipe face blendshapes.
- * This is a heuristic mapping -- not a trained emotion model,
+ * Heuristic mapping -- not a trained emotion model,
  * but sufficient for eye contact and basic expression detection.
  */
 function classifyEmotion(
@@ -143,7 +173,6 @@ function classifyEmotion(
   const eyeWide =
     ((shapes["eyeWideLeft"] || 0) + (shapes["eyeWideRight"] || 0)) / 2;
 
-  // Heuristic scores (0-1 range)
   const happy = Math.min(1, smile * 2);
   const confident = Math.min(1, smile * 0.5 + (1 - frown) * 0.3 + (1 - browDown) * 0.2);
   const nervous = Math.min(1, browDown * 0.4 + frown * 0.3 + jawOpen * 0.3);
@@ -169,4 +198,6 @@ export function destroyFaceLandmarker(): void {
     faceLandmarker.close();
     faceLandmarker = null;
   }
+  isReady = false;
+  lastTimestampMs = -1;
 }
