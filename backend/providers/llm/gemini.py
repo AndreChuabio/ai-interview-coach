@@ -1,19 +1,27 @@
 """
 Google Gemini LLM provider.
 Free tier: 15 RPM, ~1M tokens/day on gemini-2.0-flash.
+Includes retry logic for rate limit (429) errors.
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
+import re
 from typing import Any
 
 from google import genai
+from google.genai import errors as genai_errors
 
 from backend.providers.base import LLMProvider
 
 logger = logging.getLogger(__name__)
+
+# Retry config for rate-limited requests
+MAX_RETRIES = 3
+BASE_DELAY_SEC = 5
 
 
 class GeminiProvider(LLMProvider):
@@ -34,7 +42,6 @@ class GeminiProvider(LLMProvider):
         """
         Build a single prompt string from messages and system prompt.
         Gemini's generate_content works with a flat string or structured Content objects.
-        We use a simple string concatenation approach for compatibility.
         """
         parts: list[str] = []
         if system_prompt:
@@ -48,29 +55,56 @@ class GeminiProvider(LLMProvider):
                 parts.append(f"User: {content}")
         return "\n\n".join(parts)
 
+    def _extract_retry_delay(self, error: Exception) -> float:
+        """Extract retry delay from Gemini 429 error message, or use default."""
+        error_str = str(error)
+        match = re.search(r"retry in ([\d.]+)s", error_str)
+        if match:
+            return float(match.group(1)) + 1.0
+        return BASE_DELAY_SEC
+
     async def chat(
         self,
         messages: list[dict[str, str]],
         system_prompt: str = "",
         temperature: float = 0.7,
     ) -> str:
-        """Send a chat request to Gemini and return the text response."""
+        """Send a chat request to Gemini with retry on rate limit errors."""
         prompt = self._build_contents(messages, system_prompt)
-        try:
-            response = self._client.models.generate_content(
-                model=self._model,
-                contents=prompt,
-                config={
-                    "temperature": temperature,
-                    "max_output_tokens": 2048,
-                },
-            )
-            text = response.text.strip() if response.text else ""
-            logger.debug("Gemini response length: %d chars", len(text))
-            return text
-        except Exception:
-            logger.exception("Gemini chat request failed")
-            raise
+
+        for attempt in range(MAX_RETRIES + 1):
+            try:
+                response = self._client.models.generate_content(
+                    model=self._model,
+                    contents=prompt,
+                    config={
+                        "temperature": temperature,
+                        "max_output_tokens": 2048,
+                    },
+                )
+                text = response.text.strip() if response.text else ""
+                logger.debug("Gemini response length: %d chars", len(text))
+                return text
+
+            except genai_errors.ClientError as exc:
+                if "429" in str(exc) and attempt < MAX_RETRIES:
+                    delay = self._extract_retry_delay(exc)
+                    logger.warning(
+                        "Gemini rate limited (attempt %d/%d). Retrying in %.1fs...",
+                        attempt + 1,
+                        MAX_RETRIES,
+                        delay,
+                    )
+                    await asyncio.sleep(delay)
+                    continue
+                logger.exception("Gemini request failed after retries")
+                raise
+
+            except Exception:
+                logger.exception("Gemini chat request failed")
+                raise
+
+        raise RuntimeError("Gemini request failed: max retries exceeded")
 
     async def chat_json(
         self,

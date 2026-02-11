@@ -6,11 +6,11 @@ Built for the Fordham University AI Solutions Challenge (Spring 2026).
 
 ## Key Features
 
-- **Voice-based AI interviewer**: Speak naturally with an AI that asks follow-up questions based on your responses
-- **Facial expression tracking**: MediaPipe Face Mesh runs in-browser to detect eye contact, emotions, and fidgeting
-- **Tone analysis**: librosa-powered audio analysis measures speaking pace, filler words, pitch, and energy
-- **Comprehensive feedback report**: Post-interview report with content scoring, communication metrics, and body language analysis
-- **Provider-agnostic**: Swap LLM, STT, and TTS providers by changing a single environment variable
+- **Voice-based AI interviewer** -- speak naturally; the AI asks follow-up questions based on your answers
+- **Facial expression tracking** -- MediaPipe Face Mesh runs in-browser to detect eye contact, emotions, and head pose
+- **Tone analysis** -- librosa-powered audio analysis measures speaking pace, filler words, pitch, energy, and silence
+- **Comprehensive feedback report** -- post-interview report with content scoring, communication metrics, body language analysis, and radar chart
+- **Provider-agnostic** -- swap LLM, STT, and TTS providers by changing a single environment variable (zero-cost defaults included)
 
 ## Architecture
 
@@ -28,21 +28,85 @@ Browser (Next.js)                          Backend (FastAPI)
 
 ## Provider Abstraction
 
-Every external API sits behind an abstract interface. Swap providers via `.env`:
+Every external AI service sits behind an abstract base class. Swap providers via `.env` -- no code changes needed:
 
-| Service | Free Option | Paid Options |
-|---------|-------------|--------------|
-| LLM     | Gemini 2.0 Flash (free tier) | OpenAI GPT-4o, Anthropic Claude, Ollama (local) |
-| STT     | Local Whisper (offline)       | OpenAI Whisper API, Deepgram, Google Cloud STT |
-| TTS     | edge-tts (free)              | OpenAI TTS, ElevenLabs, Google Cloud TTS |
+| Service | Free Option (default) | Paid Options |
+|---------|----------------------|--------------|
+| LLM     | Gemini 2.5 Flash (free tier) | OpenAI GPT-4o, Anthropic Claude, Ollama (local) |
+| STT     | Local Whisper (offline) | OpenAI Whisper API, Deepgram, Google Cloud STT |
+| TTS     | edge-tts (free) | OpenAI TTS, ElevenLabs, Google Cloud TTS |
 
 Zero-cost development stack: Gemini free tier + local Whisper + edge-tts = $0.
+
+## Quick Start
+
+### Prerequisites
+
+- Python 3.10+
+- Node.js 18+
+- ffmpeg (required by Whisper for audio processing)
+- A free Google API key from [Google AI Studio](https://aistudio.google.com/apikey)
+
+Install ffmpeg if you don't have it:
+
+```bash
+# macOS
+brew install ffmpeg
+
+# Ubuntu / Debian
+sudo apt install ffmpeg
+
+# Windows (via chocolatey)
+choco install ffmpeg
+```
+
+### 1. Clone and configure
+
+```bash
+git clone https://github.com/AndreChuabio/ai-interview-coach.git
+cd ai-interview-coach
+
+# Set up environment variables
+cp .env.example .env
+```
+
+Open `.env` and paste your Google API key:
+
+```
+GOOGLE_API_KEY=your_key_here
+```
+
+That is the only required configuration. Everything else has working defaults.
+
+### 2. Backend
+
+```bash
+python -m venv .venv
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+
+uvicorn backend.main:app --reload --port 8000
+```
+
+The first run downloads the Whisper `base` model (~140 MB). Subsequent starts are instant.
+
+### 3. Frontend
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+### 4. Use it
+
+Open **http://localhost:3000** in your browser. Select an interview type, role, and company, then click Start Interview. Allow microphone and camera access when prompted.
 
 ## Project Structure
 
 ```
 ai-interview-coach/
-├── frontend/                    # Next.js + Tailwind CSS + shadcn/ui
+├── frontend/                    # Next.js + Tailwind CSS
 │   ├── src/app/                 # App router pages
 │   ├── src/components/          # React components
 │   │   ├── InterviewSetup.tsx   # Role/company/type selector
@@ -55,68 +119,48 @@ ai-interview-coach/
 │   ├── config.py                # Provider selection via .env
 │   ├── routers/                 # API endpoints (interview, feedback)
 │   ├── services/                # Business logic
-│   │   ├── interview_agent.py   # LLM conversation engine
+│   │   ├── interview_agent.py   # LLM conversation orchestration
 │   │   ├── tone_analyzer.py     # librosa audio analysis
 │   │   ├── face_aggregator.py   # Facial expression aggregation
 │   │   └── feedback_engine.py   # Report generation
-│   ├── providers/               # Swappable API provider layer
-│   │   ├── base.py              # ABC interfaces
-│   │   ├── factory.py           # Provider factory
+│   ├── providers/               # Swappable AI provider layer
+│   │   ├── base.py              # Abstract base classes (LLM, STT, TTS)
+│   │   ├── factory.py           # Provider factory (reads .env)
 │   │   ├── llm/                 # Gemini, OpenAI, Anthropic, Ollama
-│   │   ├── stt/                 # Whisper (local/API), Deepgram, Google
-│   │   └── tts/                 # edge-tts, OpenAI, ElevenLabs, Google
-│   └── prompts/                 # Interview prompts (behavioral, technical, case)
+│   │   ├── stt/                 # Whisper local, Whisper API, Deepgram
+│   │   └── tts/                 # edge-tts, OpenAI TTS, ElevenLabs
+│   ├── prompts/                 # System prompts per interview type
+│   └── data/                    # Question bank (JSON)
 ├── requirements.txt
-└── .env.example
+├── .env.example
+└── .gitignore
 ```
-
-## Quick Start
-
-### Prerequisites
-
-- Python 3.10+
-- Node.js 18+
-- A Google API key (for Gemini free tier) OR any supported LLM provider key
-
-### Backend Setup
-
-```bash
-cd ai-interview-coach
-
-# Create virtual environment
-python -m venv .venv
-source .venv/bin/activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Configure providers
-cp .env.example .env
-# Edit .env with your API key(s)
-
-# Start the backend
-uvicorn backend.main:app --reload --port 8000
-```
-
-### Frontend Setup
-
-```bash
-cd ai-interview-coach/frontend
-
-# Install dependencies
-npm install
-
-# Start the dev server
-npm run dev
-```
-
-Open http://localhost:3000 to start practicing.
 
 ## Interview Types
 
-- **Behavioral**: STAR method evaluation, leadership, teamwork, conflict resolution
-- **Technical**: Data science, coding, SQL, system design
-- **Case Study**: Market sizing, profitability, strategy frameworks
+- **Behavioral** -- STAR method evaluation, leadership, teamwork, conflict resolution
+- **Technical** -- data science, coding, SQL, system design
+- **Case Study** -- market sizing, profitability, strategy frameworks
+
+## Switching Providers
+
+Edit `.env` to swap any provider. Example -- switch from Gemini to OpenAI:
+
+```bash
+LLM_PROVIDER=openai
+LLM_MODEL=gpt-4o-mini
+OPENAI_API_KEY=sk-...
+```
+
+Or use a fully local stack with Ollama:
+
+```bash
+LLM_PROVIDER=ollama
+LLM_MODEL=llama3
+OLLAMA_URL=http://localhost:11434
+```
+
+No code changes required. Restart the backend after editing `.env`.
 
 ## Tech Stack
 
@@ -128,26 +172,24 @@ Open http://localhost:3000 to start practicing.
 
 ## Current Status
 
-Phase 1-2 complete:
+Phase 1-2 complete (voice pipeline + real-time analysis):
 - Voice conversation pipeline (STT -> LLM -> TTS) working end-to-end
-- Provider abstraction layer with free-tier defaults
+- Provider abstraction layer with free-tier defaults and retry logic
 - MediaPipe face tracking with real-time expression indicators
-- librosa tone analysis (pace, fillers, pitch, energy)
+- librosa tone analysis (pace, fillers, pitch, energy, silence ratio)
 - Interview setup UI with type/role/company/difficulty selection
-- Real-time transcript with per-turn tone metrics
+- Live transcript with per-turn tone metrics
 - Face tracker sidebar with eye contact and emotion detection
+- Feedback report page with radar chart and per-category scoring
 
-Phase 3-4 pending:
-- Comprehensive feedback report generation
+Phase 3-4 planned:
 - Paid provider implementations (OpenAI, Deepgram, ElevenLabs)
-- Deployment to Vercel + Railway
-- UI polish and demo preparation
+- Deployment to Vercel (frontend) + Railway (backend)
+- UI polish and demo video
 
 ## Author
 
-Andre Chuabio
-Email: andre102599@gmail.com
-GitHub: https://github.com/AndreChuabio
+Andre Chuabio -- [GitHub](https://github.com/AndreChuabio) -- andre102599@gmail.com
 
 ## License
 
