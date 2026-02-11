@@ -21,7 +21,8 @@ logger = logging.getLogger(__name__)
 
 # Load static question bank once at import time
 _QUESTION_BANK: dict = {}
-_BANK_PATH = Path(__file__).resolve().parent.parent / "data" / "question_bank.json"
+_BANK_PATH = Path(__file__).resolve().parent.parent / \
+    "data" / "question_bank.json"
 if _BANK_PATH.exists():
     with open(_BANK_PATH) as f:
         _QUESTION_BANK = json.load(f)
@@ -138,8 +139,10 @@ class InterviewAgent:
         self._rag_context_text: str = ""
 
         company_clause = f" at {session.company}" if session.company else ""
-        topic_suggestions = _get_topic_suggestions(session.interview_type, session.role)
-        sample_questions = _get_sample_questions(session.interview_type, session.role)
+        topic_suggestions = _get_topic_suggestions(
+            session.interview_type, session.role)
+        sample_questions = _get_sample_questions(
+            session.interview_type, session.role)
 
         self._base_system_prompt = self._prompts.SYSTEM_PROMPT.format(
             role=session.role,
@@ -168,11 +171,14 @@ class InterviewAgent:
                     + "\n\n--- Knowledge Graph Context ---\n"
                     + self._rag_context_text
                 )
-                logger.info("RAG context injected (%d chars)", len(self._rag_context_text))
+                logger.info("RAG context injected (%d chars)",
+                            len(self._rag_context_text))
             else:
-                logger.info("RAG returned empty context, using static prompt only")
+                logger.info(
+                    "RAG returned empty context, using static prompt only")
         except Exception:
-            logger.warning("RAG enrichment failed, continuing with static prompt", exc_info=True)
+            logger.warning(
+                "RAG enrichment failed, continuing with static prompt", exc_info=True)
 
     async def generate_opening(self) -> str:
         """Generate the first interview question, enriched with RAG context."""

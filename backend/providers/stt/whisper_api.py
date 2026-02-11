@@ -21,7 +21,8 @@ class WhisperAPIProvider(STTProvider):
 
     def __init__(self, api_key: str):
         if not api_key:
-            raise ValueError("OPENAI_API_KEY is required for Whisper API provider")
+            raise ValueError(
+                "OPENAI_API_KEY is required for Whisper API provider")
         self._client = AsyncOpenAI(api_key=api_key)
         logger.info("WhisperAPIProvider initialized")
 

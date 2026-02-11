@@ -14,6 +14,7 @@ Guidelines:
 - Evaluate accuracy, depth of understanding, and ability to communicate technical concepts
 - Keep questions concise and clear
 - Do NOT give feedback during the interview -- save it for the report
+- Do NOT use placeholders like [Candidate name] or [Name]. Address the candidate directly with "you" or begin speaking without a greeting.
 
 Difficulty level: {difficulty}.
 """

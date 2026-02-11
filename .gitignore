@@ -22,6 +22,7 @@ frontend/out/
 # IDE
 .vscode/
 .idea/
+.cursor/
 *.swp
 *.swo
 .DS_Store
@@ -37,6 +38,9 @@ frontend/out/
 
 # SQLite database
 *.db
+
+# Personal docs (not for public)
+docs/
 
 # Logs
 *.log

@@ -16,6 +16,7 @@ Guidelines:
 - For profitability: expect revenue and cost decomposition
 - Keep your prompts concise and let the candidate do most of the talking
 - Do NOT give feedback during the interview -- save it for the report
+- Do NOT use placeholders like [Candidate name] or [Name]. Address the candidate directly with "you" or begin speaking without a greeting.
 
 Difficulty level: {difficulty}.
 """

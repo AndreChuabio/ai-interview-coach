@@ -37,6 +37,81 @@ interface Turn {
   tone?: ToneSnapshot;
 }
 
+/* ------------------------------------------------------------------ */
+/*  Progress Bar                                                       */
+/* ------------------------------------------------------------------ */
+function ProgressBar({
+  current,
+  total,
+}: {
+  current: number;
+  total: number;
+}) {
+  return (
+    <div className="flex items-center gap-1.5 w-full">
+      {Array.from({ length: total }, (_, i) => {
+        const idx = i + 1;
+        const done = idx < current;
+        const active = idx === current;
+        return (
+          <div
+            key={i}
+            className={`h-1.5 flex-1 rounded-full transition-all duration-500 ${
+              done
+                ? "bg-blue-500"
+                : active
+                  ? "bg-blue-400 animate-pulse"
+                  : "bg-gray-200 dark:bg-gray-700"
+            }`}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Audio Level Bars (CSS animation during recording)                   */
+/* ------------------------------------------------------------------ */
+function AudioLevelBars() {
+  return (
+    <div className="flex items-end gap-0.5 h-5">
+      {[1, 2, 3, 4, 5].map((i) => (
+        <div
+          key={i}
+          className="w-1 bg-red-400 rounded-full"
+          style={{
+            animation: `audioBar 0.8s ease-in-out ${i * 0.1}s infinite alternate`,
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Phase Indicator                                                     */
+/* ------------------------------------------------------------------ */
+function PhaseIndicator({ phase }: { phase: Phase }) {
+  const colors: Record<Phase, string> = {
+    loading: "bg-gray-400",
+    ai_speaking: "bg-yellow-400",
+    listening: "bg-green-400 animate-pulse",
+    processing: "bg-blue-400 animate-pulse",
+    done: "bg-green-500",
+  };
+
+  return (
+    <div className="flex items-center gap-2 text-xs text-gray-500">
+      <span className={`w-2 h-2 rounded-full ${colors[phase]}`} />
+      {phase === "listening" ? "Your turn" : phase.replace("_", " ")}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Main Component                                                      */
+/* ------------------------------------------------------------------ */
 export default function InterviewSession({ session, onComplete }: Props) {
   const [phase, setPhase] = useState<Phase>("loading");
   const [transcript, setTranscript] = useState<Turn[]>([]);
@@ -188,44 +263,59 @@ export default function InterviewSession({ session, onComplete }: Props) {
   const formatTime = (sec: number) =>
     `${Math.floor(sec / 60)}:${(sec % 60).toString().padStart(2, "0")}`;
 
+  const showSidebar = faceTrackingOn || latestTone;
+
   return (
     <div className="max-w-5xl mx-auto flex flex-col h-[calc(100vh-8rem)]">
       {/* Header */}
-      <div className="flex items-center justify-between pb-4 border-b border-gray-200 dark:border-gray-700">
-        <div>
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white capitalize">
-            {session.interview_type.replace("_", " ")} Interview
-          </h2>
-          <p className="text-sm text-gray-500">
-            {session.role}
-            {session.company ? ` at ${session.company}` : ""} --
-            Question {questionNum}/{session.num_questions}
-          </p>
+      <div className="pb-4 border-b border-gray-200 dark:border-gray-700 space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white capitalize">
+              {session.interview_type.replace("_", " ")} Interview
+            </h2>
+            <p className="text-sm text-gray-500">
+              {session.role}
+              {session.company ? ` at ${session.company}` : ""}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <PhaseIndicator phase={phase} />
+            <button
+              onClick={() => setFaceTrackingOn(!faceTrackingOn)}
+              className={`p-2 rounded-lg transition-colors ${
+                faceTrackingOn
+                  ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300"
+                  : "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400"
+              }`}
+              title={faceTrackingOn ? "Disable face tracking" : "Enable face tracking"}
+            >
+              {faceTrackingOn ? (
+                <Video className="w-5 h-5" />
+              ) : (
+                <VideoOff className="w-5 h-5" />
+              )}
+            </button>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <PhaseIndicator phase={phase} />
-          <button
-            onClick={() => setFaceTrackingOn(!faceTrackingOn)}
-            className={`p-2 rounded-lg transition-colors ${
-              faceTrackingOn
-                ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300"
-                : "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400"
-            }`}
-            title={faceTrackingOn ? "Disable face tracking" : "Enable face tracking"}
-          >
-            {faceTrackingOn ? (
-              <Video className="w-5 h-5" />
-            ) : (
-              <VideoOff className="w-5 h-5" />
-            )}
-          </button>
+
+        {/* Progress bar */}
+        <div className="flex items-center gap-3">
+          <ProgressBar current={questionNum} total={session.num_questions} />
+          <span className="text-xs text-gray-400 whitespace-nowrap">
+            {questionNum}/{session.num_questions}
+          </span>
         </div>
       </div>
 
       {/* Main content area */}
       <div className="flex-1 flex gap-4 min-h-0 mt-4">
-        {/* Transcript column */}
-        <div className="flex-1 overflow-y-auto pr-2 space-y-4">
+        {/* Transcript column -- expands to full width when sidebar hidden */}
+        <div
+          className={`overflow-y-auto pr-2 space-y-4 transition-all duration-300 ${
+            showSidebar ? "flex-1" : "w-full"
+          }`}
+        >
           {transcript.map((turn, i) => (
             <div
               key={i}
@@ -262,144 +352,148 @@ export default function InterviewSession({ session, onComplete }: Props) {
               <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
             </div>
           )}
+
+          {/* Inline tip banner when sidebar is hidden and no tone data yet */}
+          {!showSidebar && transcript.length > 0 && (
+            <div className="flex items-center gap-3 px-4 py-2.5 rounded-lg bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 text-xs text-blue-600 dark:text-blue-400">
+              <span className="font-medium">Tip:</span>
+              Speak at 130-160 WPM. Use pauses instead of fillers. Structure answers with STAR method.
+            </div>
+          )}
+
           <div ref={transcriptEndRef} />
         </div>
 
-        {/* Right sidebar: face tracker + tone metrics */}
-        <div className="w-72 flex-shrink-0 space-y-3">
-          {/* Face Tracker */}
-          <FaceTracker
-            active={faceTrackingOn}
-            onFrameBatch={handleFaceFrameBatch}
-            showPreview={true}
-          />
+        {/* Right sidebar: face tracker + tone metrics -- only when needed */}
+        {showSidebar && (
+          <div className="w-72 flex-shrink-0 space-y-3 transition-all duration-300">
+            {/* Face Tracker */}
+            <FaceTracker
+              active={faceTrackingOn}
+              onFrameBatch={handleFaceFrameBatch}
+              showPreview={true}
+            />
 
-          {/* Real-time Tone Metrics */}
-          {latestTone && (
-            <div className="bg-white dark:bg-gray-800 rounded-xl p-3 border border-gray-200 dark:border-gray-700 space-y-3">
-              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
-                <Activity className="w-3.5 h-3.5" />
-                Last Response Metrics
-              </h3>
+            {/* Real-time Tone Metrics */}
+            {latestTone && (
+              <div className="bg-white dark:bg-gray-800 rounded-xl p-3 border border-gray-200 dark:border-gray-700 space-y-3">
+                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
+                  <Activity className="w-3.5 h-3.5" />
+                  Last Response Metrics
+                </h3>
 
-              {/* Speaking Pace */}
-              <div>
-                <div className="flex justify-between text-xs mb-1">
-                  <span className="text-gray-500 flex items-center gap-1">
-                    <Gauge className="w-3 h-3" /> Pace
-                  </span>
-                  <span className={`font-medium ${
-                    latestTone.speaking_pace_wpm >= 130 && latestTone.speaking_pace_wpm <= 160
-                      ? "text-green-600"
-                      : latestTone.speaking_pace_wpm > 0
-                        ? "text-amber-600"
-                        : "text-gray-400"
-                  }`}>
-                    {latestTone.speaking_pace_wpm.toFixed(0)} WPM
-                  </span>
-                </div>
-                <div className="w-full h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                  <div
-                    className={`h-full rounded-full transition-all ${
+                {/* Speaking Pace */}
+                <div>
+                  <div className="flex justify-between text-xs mb-1">
+                    <span className="text-gray-500 flex items-center gap-1">
+                      <Gauge className="w-3 h-3" /> Pace
+                    </span>
+                    <span className={`font-medium ${
                       latestTone.speaking_pace_wpm >= 130 && latestTone.speaking_pace_wpm <= 160
-                        ? "bg-green-500"
-                        : "bg-amber-500"
-                    }`}
-                    style={{
-                      width: `${Math.min(100, (latestTone.speaking_pace_wpm / 200) * 100)}%`,
-                    }}
-                  />
+                        ? "text-green-600"
+                        : latestTone.speaking_pace_wpm > 0
+                          ? "text-amber-600"
+                          : "text-gray-400"
+                    }`}>
+                      {latestTone.speaking_pace_wpm.toFixed(0)} WPM
+                    </span>
+                  </div>
+                  <div className="w-full h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all ${
+                        latestTone.speaking_pace_wpm >= 130 && latestTone.speaking_pace_wpm <= 160
+                          ? "bg-green-500"
+                          : "bg-amber-500"
+                      }`}
+                      style={{
+                        width: `${Math.min(100, (latestTone.speaking_pace_wpm / 200) * 100)}%`,
+                      }}
+                    />
+                  </div>
+                  <div className="flex justify-between text-[10px] text-gray-400 mt-0.5">
+                    <span>Slow</span>
+                    <span>130-160 ideal</span>
+                    <span>Fast</span>
+                  </div>
                 </div>
-                <div className="flex justify-between text-[10px] text-gray-400 mt-0.5">
-                  <span>Slow</span>
-                  <span>130-160 ideal</span>
-                  <span>Fast</span>
-                </div>
-              </div>
 
-              {/* Energy Level */}
-              <div>
-                <div className="flex justify-between text-xs mb-1">
-                  <span className="text-gray-500">Energy</span>
-                  <span className="font-medium text-gray-700 dark:text-gray-300">
-                    {(latestTone.energy_level * 100).toFixed(0)}%
+                {/* Energy Level */}
+                <div>
+                  <div className="flex justify-between text-xs mb-1">
+                    <span className="text-gray-500">Energy</span>
+                    <span className="font-medium text-gray-700 dark:text-gray-300">
+                      {(latestTone.energy_level * 100).toFixed(0)}%
+                    </span>
+                  </div>
+                  <div className="w-full h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-blue-500 rounded-full transition-all"
+                      style={{ width: `${latestTone.energy_level * 100}%` }}
+                    />
+                  </div>
+                </div>
+
+                {/* Fillers */}
+                <div className="flex justify-between text-xs">
+                  <span className="text-gray-500">Filler Words</span>
+                  <span
+                    className={`font-medium ${
+                      latestTone.filler_word_count === 0
+                        ? "text-green-600"
+                        : latestTone.filler_word_count <= 3
+                          ? "text-amber-600"
+                          : "text-red-600"
+                    }`}
+                  >
+                    {latestTone.filler_word_count}
+                    {latestTone.filler_word_count === 0 && " (clean)"}
                   </span>
                 </div>
-                <div className="w-full h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-blue-500 rounded-full transition-all"
-                    style={{ width: `${latestTone.energy_level * 100}%` }}
-                  />
+
+                {/* Silence Ratio */}
+                <div className="flex justify-between text-xs">
+                  <span className="text-gray-500">Silence</span>
+                  <span className="font-medium text-gray-700 dark:text-gray-300">
+                    {(latestTone.silence_ratio * 100).toFixed(0)}%
+                  </span>
                 </div>
               </div>
-
-              {/* Fillers */}
-              <div className="flex justify-between text-xs">
-                <span className="text-gray-500">Filler Words</span>
-                <span
-                  className={`font-medium ${
-                    latestTone.filler_word_count === 0
-                      ? "text-green-600"
-                      : latestTone.filler_word_count <= 3
-                        ? "text-amber-600"
-                        : "text-red-600"
-                  }`}
-                >
-                  {latestTone.filler_word_count}
-                  {latestTone.filler_word_count === 0 && " (clean)"}
-                </span>
-              </div>
-
-              {/* Silence Ratio */}
-              <div className="flex justify-between text-xs">
-                <span className="text-gray-500">Silence</span>
-                <span className="font-medium text-gray-700 dark:text-gray-300">
-                  {(latestTone.silence_ratio * 100).toFixed(0)}%
-                </span>
-              </div>
-            </div>
-          )}
-
-          {/* Tips panel (when no tone data yet) */}
-          {!latestTone && !faceTrackingOn && (
-            <div className="bg-blue-50 dark:bg-blue-950 rounded-xl p-4 border border-blue-200 dark:border-blue-800">
-              <h3 className="text-sm font-semibold text-blue-700 dark:text-blue-300 mb-2">
-                Tips
-              </h3>
-              <ul className="text-xs text-blue-600 dark:text-blue-400 space-y-1.5">
-                <li>- Speak at a steady pace (130-160 WPM)</li>
-                <li>- Use pauses instead of filler words</li>
-                <li>- Enable webcam for facial expression feedback</li>
-                <li>- Structure answers: Situation, Task, Action, Result</li>
-              </ul>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Controls */}
       <div className="pt-4 border-t border-gray-200 dark:border-gray-700 mt-4">
-        <div className="flex justify-center gap-4">
+        <div className="flex flex-col items-center gap-2">
           {phase === "listening" && (
             <>
               {isRecording ? (
-                <button
-                  onClick={stopRecording}
-                  className="flex items-center gap-2 px-6 py-3 rounded-full bg-red-600 hover:bg-red-700 text-white font-medium transition-colors"
-                >
-                  <Square className="w-5 h-5" />
-                  Stop Recording
-                  <span className="text-sm opacity-80 ml-1">
+                <div className="flex flex-col items-center gap-2">
+                  {/* Timer -- prominent */}
+                  <span className="text-2xl font-mono font-semibold text-red-500 tabular-nums">
                     {formatTime(recordingDuration)}
                   </span>
-                </button>
+                  <AudioLevelBars />
+                  <button
+                    onClick={stopRecording}
+                    className="relative flex items-center gap-2 px-8 py-3 rounded-full bg-red-600 hover:bg-red-700 text-white font-medium transition-colors"
+                  >
+                    {/* Pulsing ring */}
+                    <span className="absolute inset-0 rounded-full border-2 border-red-400 animate-ping opacity-40" />
+                    <Square className="w-5 h-5 relative" />
+                    <span className="relative">Stop Recording</span>
+                  </button>
+                </div>
               ) : (
                 <button
                   onClick={startRecording}
-                  className="flex items-center gap-2 px-6 py-3 rounded-full bg-blue-600 hover:bg-blue-700 text-white font-medium transition-colors animate-pulse"
+                  className="relative flex items-center gap-2 px-8 py-3 rounded-full bg-blue-600 hover:bg-blue-700 text-white font-medium transition-all shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40"
                 >
-                  <Mic className="w-5 h-5" />
-                  Start Speaking
+                  {/* Gentle pulse ring */}
+                  <span className="absolute inset-0 rounded-full border-2 border-blue-400 animate-pulse opacity-30" />
+                  <Mic className="w-5 h-5 relative" />
+                  <span className="relative">Start Speaking</span>
                 </button>
               )}
             </>
@@ -433,23 +527,6 @@ export default function InterviewSession({ session, onComplete }: Props) {
           )}
         </div>
       </div>
-    </div>
-  );
-}
-
-function PhaseIndicator({ phase }: { phase: Phase }) {
-  const colors: Record<Phase, string> = {
-    loading: "bg-gray-400",
-    ai_speaking: "bg-yellow-400",
-    listening: "bg-green-400 animate-pulse",
-    processing: "bg-blue-400 animate-pulse",
-    done: "bg-green-500",
-  };
-
-  return (
-    <div className="flex items-center gap-2 text-xs text-gray-500">
-      <span className={`w-2 h-2 rounded-full ${colors[phase]}`} />
-      {phase === "listening" ? "Your turn" : phase.replace("_", " ")}
     </div>
   );
 }

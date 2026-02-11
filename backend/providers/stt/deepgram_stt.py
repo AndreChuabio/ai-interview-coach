@@ -22,7 +22,8 @@ class DeepgramProvider(STTProvider):
 
     def __init__(self, api_key: str, model: str = "nova-2"):
         if not api_key:
-            raise ValueError("DEEPGRAM_API_KEY is required for Deepgram provider")
+            raise ValueError(
+                "DEEPGRAM_API_KEY is required for Deepgram provider")
         self._api_key = api_key
         self._model = model
         self._client = httpx.AsyncClient(timeout=30.0)
@@ -67,7 +68,8 @@ class DeepgramProvider(STTProvider):
             return text
 
         except httpx.HTTPStatusError as exc:
-            logger.error("Deepgram API error: %s %s", exc.response.status_code, exc.response.text[:200])
+            logger.error("Deepgram API error: %s %s",
+                         exc.response.status_code, exc.response.text[:200])
             raise
         except Exception:
             logger.exception("Deepgram transcription failed")
