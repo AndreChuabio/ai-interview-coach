@@ -35,5 +35,8 @@ frontend/out/
 *.webm
 !backend/data/*.json
 
+# SQLite database
+*.db
+
 # Logs
 *.log

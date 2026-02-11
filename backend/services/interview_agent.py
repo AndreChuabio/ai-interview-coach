@@ -2,7 +2,8 @@
 Interview conversation agent.
 Manages the flow of an interview session using an LLM provider.
 Generates opening questions, follow-ups, and closing statements.
-Uses curated question topics and a question bank for grounded suggestions.
+Uses curated question topics, a static question bank, and a Neo4j
+knowledge graph (RAG) for grounded, company-specific suggestions.
 """
 
 from __future__ import annotations
@@ -10,7 +11,6 @@ from __future__ import annotations
 import json
 import logging
 import random
-from importlib import resources as pkg_resources
 from pathlib import Path
 
 from backend.models.schemas import InterviewSession, InterviewType
@@ -19,7 +19,7 @@ from backend.providers.base import LLMProvider
 
 logger = logging.getLogger(__name__)
 
-# Load question bank once at import time
+# Load static question bank once at import time
 _QUESTION_BANK: dict = {}
 _BANK_PATH = Path(__file__).resolve().parent.parent / "data" / "question_bank.json"
 if _BANK_PATH.exists():
@@ -124,6 +124,10 @@ class InterviewAgent:
     """
     Manages a single interview conversation using the configured LLM provider.
     Tracks conversation history and generates contextual follow-ups.
+
+    When Neo4j is available, enriches the system prompt with RAG context:
+    company-specific questions, role-targeted examples, and semantic matches.
+    Falls back gracefully to static question bank when Neo4j is unavailable.
     """
 
     def __init__(self, llm: LLMProvider, session: InterviewSession):
@@ -131,19 +135,50 @@ class InterviewAgent:
         self._session = session
         self._messages: list[dict[str, str]] = []
         self._prompts = _get_prompts(session.interview_type)
+        self._rag_context_text: str = ""
 
         company_clause = f" at {session.company}" if session.company else ""
         topic_suggestions = _get_topic_suggestions(session.interview_type, session.role)
         sample_questions = _get_sample_questions(session.interview_type, session.role)
 
-        self._system_prompt = self._prompts.SYSTEM_PROMPT.format(
+        self._base_system_prompt = self._prompts.SYSTEM_PROMPT.format(
             role=session.role,
             company_clause=company_clause,
             difficulty=session.difficulty,
         ) + topic_suggestions + sample_questions
 
+        # Full prompt is assembled in generate_opening after RAG retrieval
+        self._system_prompt = self._base_system_prompt
+
+    async def _enrich_with_rag(self) -> None:
+        """Fetch RAG context from Neo4j and append to system prompt."""
+        try:
+            from backend.knowledge.retriever import rag_retriever
+
+            ctx = await rag_retriever.get_interview_context(
+                interview_type=self._session.interview_type.value,
+                role=self._session.role,
+                company=self._session.company,
+                query_text=f"{self._session.interview_type.value} interview for {self._session.role}",
+            )
+            self._rag_context_text = ctx.format_for_prompt()
+            if self._rag_context_text:
+                self._system_prompt = (
+                    self._base_system_prompt
+                    + "\n\n--- Knowledge Graph Context ---\n"
+                    + self._rag_context_text
+                )
+                logger.info("RAG context injected (%d chars)", len(self._rag_context_text))
+            else:
+                logger.info("RAG returned empty context, using static prompt only")
+        except Exception:
+            logger.warning("RAG enrichment failed, continuing with static prompt", exc_info=True)
+
     async def generate_opening(self) -> str:
-        """Generate the first interview question."""
+        """Generate the first interview question, enriched with RAG context."""
+        # Enrich system prompt with knowledge graph context
+        await self._enrich_with_rag()
+
         company_clause = f" at {self._session.company}" if self._session.company else ""
         user_msg = self._prompts.OPENING_TEMPLATE.format(
             role=self._session.role,

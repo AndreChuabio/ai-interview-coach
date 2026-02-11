@@ -6,16 +6,17 @@ from __future__ import annotations
 
 import base64
 import logging
-from typing import Optional
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, File, HTTPException, UploadFile
 
+from backend.db.session_store import session_store
 from backend.models.schemas import (
     FaceDataBatch,
     InterviewSession,
     InterviewSetupRequest,
     RespondResponse,
     SessionStatus,
+    TranscriptEntry,
 )
 from backend.providers.factory import get_llm_provider, get_stt_provider, get_tts_provider
 from backend.services.interview_agent import InterviewAgent
@@ -24,8 +25,7 @@ from backend.services.tone_analyzer import ToneAnalyzer
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-# In-memory session store (swap for Redis/DB in production)
-_sessions: dict[str, InterviewSession] = {}
+# In-memory agent cache (agents are not persisted -- session data is)
 _agents: dict[str, InterviewAgent] = {}
 
 
@@ -43,7 +43,6 @@ async def start_interview(req: InterviewSetupRequest):
 
     llm = get_llm_provider()
     agent = InterviewAgent(llm=llm, session=session)
-    _sessions[session.session_id] = session
     _agents[session.session_id] = agent
 
     # Generate the opening question
@@ -53,10 +52,11 @@ async def start_interview(req: InterviewSetupRequest):
     audio_b64 = base64.b64encode(audio_bytes).decode()
 
     session.transcript.append(
-        __import__("backend.models.schemas", fromlist=["TranscriptEntry"]).TranscriptEntry(
-            role="interviewer", text=opening
-        )
+        TranscriptEntry(role="interviewer", text=opening)
     )
+
+    # Persist to database
+    await session_store.save_session(session)
 
     return session
 
@@ -64,7 +64,7 @@ async def start_interview(req: InterviewSetupRequest):
 @router.get("/session/{session_id}", response_model=InterviewSession)
 async def get_session(session_id: str):
     """Retrieve current session state."""
-    session = _sessions.get(session_id)
+    session = await session_store.get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     return session
@@ -82,7 +82,7 @@ async def respond(
     3. Generate interviewer follow-up (LLM provider)
     4. Synthesize follow-up audio (TTS provider)
     """
-    session = _sessions.get(session_id)
+    session = await session_store.get_session(session_id)
     agent = _agents.get(session_id)
     if not session or not agent:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -103,8 +103,6 @@ async def respond(
     session.tone_data.append(tone_snapshot)
 
     # Record candidate turn
-    from backend.models.schemas import TranscriptEntry
-
     session.transcript.append(
         TranscriptEntry(
             role="candidate",
@@ -133,6 +131,9 @@ async def respond(
     audio_response = await tts.synthesize(interviewer_text)
     audio_b64 = base64.b64encode(audio_response).decode()
 
+    # Persist updated session
+    await session_store.update_session(session)
+
     return RespondResponse(
         session_id=session_id,
         transcript_text=candidate_text,
@@ -147,18 +148,19 @@ async def respond(
 @router.post("/face-data/{session_id}")
 async def submit_face_data(session_id: str, batch: FaceDataBatch):
     """Receive batched facial expression data from the frontend."""
-    session = _sessions.get(session_id)
+    session = await session_store.get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
 
     session.face_data.extend(batch.snapshots)
+    await session_store.update_session(session)
     return {"received": len(batch.snapshots), "total": len(session.face_data)}
 
 
 @router.get("/opening-audio/{session_id}")
 async def get_opening_audio(session_id: str):
     """Get the TTS audio for the first interviewer question."""
-    session = _sessions.get(session_id)
+    session = await session_store.get_session(session_id)
     agent = _agents.get(session_id)
     if not session or not agent:
         raise HTTPException(status_code=404, detail="Session not found")

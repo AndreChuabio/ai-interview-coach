@@ -31,7 +31,7 @@ Company: {company}
 
 Transcript:
 {transcript}
-
+{rag_context}
 Evaluate the candidate's responses and return JSON with this exact structure:
 {{
   "overall_score": <float 0-10>,
@@ -51,6 +51,8 @@ Scoring guide:
 - 10: Exceptional (compelling, unique, perfectly structured)
 
 Be specific in strengths and improvements. Quote the candidate where helpful.
+If reference answers are provided above, use them as a quality benchmark -- the candidate
+does not need to match them exactly, but compare depth, specificity, and structure.
 """
 
 
@@ -121,12 +123,37 @@ class FeedbackEngine:
     async def _analyze_content(
         self, session: InterviewSession, transcript: str
     ) -> ContentScore:
-        """Use the LLM to evaluate response content quality."""
+        """Use the LLM to evaluate response content quality, enriched with RAG examples."""
+        # Retrieve example answers from knowledge graph for benchmarking
+        rag_context_text = ""
+        try:
+            from backend.knowledge.retriever import rag_retriever
+            # Use candidate responses as the query for semantic similarity
+            candidate_texts = [
+                e.text for e in session.transcript if e.role == "candidate"
+            ]
+            combined_text = " ".join(candidate_texts) if candidate_texts else ""
+            if combined_text:
+                feedback_ctx = await rag_retriever.get_feedback_context(
+                    candidate_text=combined_text,
+                    interview_type=session.interview_type.value,
+                )
+                rag_context_text = feedback_ctx.format_for_prompt()
+                if rag_context_text:
+                    logger.info("Feedback RAG context: %d chars", len(rag_context_text))
+        except Exception:
+            logger.warning("Could not retrieve RAG feedback context", exc_info=True)
+
+        rag_block = ""
+        if rag_context_text:
+            rag_block = f"\n\n{rag_context_text}\n"
+
         prompt = CONTENT_ANALYSIS_PROMPT.format(
             interview_type=session.interview_type.value,
             role=session.role,
             company=session.company or "Not specified",
             transcript=transcript,
+            rag_context=rag_block,
         )
 
         try:

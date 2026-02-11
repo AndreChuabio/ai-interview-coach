@@ -38,17 +38,30 @@ app.include_router(feedback.router, prefix="/api/feedback", tags=["feedback"])
 
 
 @app.on_event("startup")
-async def warm_up_providers():
-    """Pre-load heavy models (Whisper) at startup so the first request is fast."""
+async def startup():
+    """Initialize database tables and pre-load heavy models at startup."""
+    # 1. Create database tables
+    from backend.db.engine import init_db
+    await init_db()
+    logger.info("Database tables initialized")
+
+    # 2. Pre-load STT model (Whisper) so the first request is fast
     try:
         from backend.providers.factory import get_stt_provider
         stt = get_stt_provider()
-        # Force Whisper model load now instead of on first request
         if hasattr(stt, "_load_model"):
             stt._load_model()
         logger.info("STT provider ready: %s", type(stt).__name__)
     except Exception as exc:
         logger.warning("Failed to pre-load STT provider: %s", exc)
+
+    # 3. Warm up Neo4j connection (non-blocking, logs warning if unavailable)
+    try:
+        from backend.knowledge.graph import neo4j_manager
+        if neo4j_manager.is_configured():
+            await neo4j_manager.verify_connection()
+    except Exception as exc:
+        logger.warning("Neo4j not available at startup (non-fatal): %s", exc)
 
 
 @app.get("/api/health")

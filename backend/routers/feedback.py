@@ -8,6 +8,7 @@ import logging
 
 from fastapi import APIRouter, HTTPException
 
+from backend.db.session_store import session_store
 from backend.models.schemas import FeedbackReport, SessionStatus
 from backend.providers.factory import get_llm_provider
 from backend.services.feedback_engine import FeedbackEngine
@@ -22,10 +23,7 @@ async def generate_feedback(session_id: str):
     Generate a comprehensive feedback report for a completed interview session.
     Aggregates content analysis, communication metrics, and body language data.
     """
-    # Import session store from interview router
-    from backend.routers.interview import _sessions
-
-    session = _sessions.get(session_id)
+    session = await session_store.get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
 
@@ -39,6 +37,9 @@ async def generate_feedback(session_id: str):
     engine = FeedbackEngine(llm=llm)
     report = await engine.generate_report(session)
 
+    # Persist report to database
+    await session_store.save_report(report)
+
     logger.info(
         "Generated feedback for session %s: overall_score=%.1f",
         session_id,
@@ -51,6 +52,9 @@ async def generate_feedback(session_id: str):
 async def get_feedback(session_id: str):
     """
     Retrieve a previously generated feedback report.
-    For now re-generates on each call; add caching later.
+    Returns cached report if available, otherwise generates a new one.
     """
+    existing = await session_store.get_report(session_id)
+    if existing:
+        return existing
     return await generate_feedback(session_id)

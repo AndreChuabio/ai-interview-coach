@@ -32,6 +32,23 @@ class Settings(BaseSettings):
     # -- Ollama (local LLM) --
     ollama_url: str = Field(default="http://localhost:11434", description="Ollama server URL")
 
+    # -- Neo4j (Knowledge Graph / RAG) --
+    neo4j_uri: str = Field(default="", description="Neo4j connection URI (bolt or neo4j+s)")
+    neo4j_username: str = Field(default="neo4j", description="Neo4j username")
+    neo4j_password: str = Field(default="", description="Neo4j password")
+
+    # -- Database (Session / Report Persistence) --
+    database_url: str = Field(
+        default="sqlite+aiosqlite:///./interview_coach.db",
+        description="SQLAlchemy async database URL. Use postgresql+asyncpg for production.",
+    )
+
+    # -- Embedding model --
+    embedding_model: str = Field(
+        default="all-MiniLM-L6-v2",
+        description="sentence-transformers model name for vector embeddings",
+    )
+
     # -- Application --
     app_name: str = "AI Interview Coach"
     debug: bool = False
