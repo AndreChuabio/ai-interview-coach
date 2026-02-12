@@ -4,17 +4,51 @@ SQLAlchemy async engine and session factory.
 Uses the DATABASE_URL from .env:
   - sqlite+aiosqlite:///./interview_coach.db   (local dev)
   - postgresql+asyncpg://user:pass@host/db      (production)
+
+Note: asyncpg does not support the 'sslmode' query parameter that
+psycopg2/libpq use. When the URL contains sslmode=require (e.g. Neon),
+we strip it from the URL and pass ssl=True via connect_args instead.
 """
+
+import ssl as _ssl
+from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
 from backend.config import settings
 
+
+def _build_engine_kwargs(url: str) -> dict:
+    """
+    Parse DATABASE_URL and return (clean_url, engine_kwargs).
+    Handles the asyncpg sslmode incompatibility by converting
+    sslmode=require into connect_args={'ssl': True}.
+    """
+    kwargs: dict = {}
+
+    if "asyncpg" in url:
+        parsed = urlparse(url)
+        qs = parse_qs(parsed.query)
+
+        if "sslmode" in qs:
+            qs.pop("sslmode")
+            clean_query = urlencode(qs, doseq=True)
+            url = urlunparse(parsed._replace(query=clean_query))
+            # Create a permissive SSL context for Neon (they use valid certs)
+            ctx = _ssl.create_default_context()
+            kwargs["connect_args"] = {"ssl": ctx}
+
+    return {"url": url, **kwargs}
+
+
+_engine_kwargs = _build_engine_kwargs(settings.database_url)
+
 engine = create_async_engine(
-    settings.database_url,
+    _engine_kwargs.pop("url"),
     echo=settings.debug,
     future=True,
+    **_engine_kwargs,
 )
 
 async_session_factory = async_sessionmaker(
