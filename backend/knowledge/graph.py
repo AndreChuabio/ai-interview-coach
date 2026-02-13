@@ -6,16 +6,24 @@ Manages the connection to Neo4j AuraDB and provides methods for:
   - Inserting knowledge nodes (companies, questions, example answers)
   - Querying by graph traversal
   - Vector similarity search (using Neo4j built-in vector index)
+
+Read operations have a 5-second timeout so the RAG layer fails fast
+when AuraDB is paused or unreachable, instead of blocking for 30s+.
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
 from neo4j import AsyncGraphDatabase, AsyncDriver
 
 from backend.config import settings
+
+# Timeout for read queries (seconds). Keeps RAG fallback fast when
+# AuraDB free tier is paused or network is unreachable.
+_READ_TIMEOUT_SEC = 5.0
 
 logger = logging.getLogger(__name__)
 
@@ -251,6 +259,19 @@ class Neo4jManager:
     # Read operations (graph traversal)
     # ------------------------------------------------------------------
 
+    async def _run_read_query(self, cypher: str, **params) -> list[dict]:
+        """
+        Execute a read query with a timeout.
+        Returns a list of record dicts, or empty list on timeout.
+        """
+        driver = await self._get_driver()
+        async with driver.session() as session:
+            result = await asyncio.wait_for(
+                session.run(cypher, **params),
+                timeout=_READ_TIMEOUT_SEC,
+            )
+            return [dict(r) async for r in result]
+
     async def get_questions_for_context(
         self,
         interview_type: str,
@@ -262,12 +283,12 @@ class Neo4jManager:
         Retrieve relevant questions using graph relationships.
         Prioritizes questions linked to the specified company and role,
         then falls back to type + topic matches.
+        Times out after 5s to keep startup fast when AuraDB is paused.
         """
-        driver = await self._get_driver()
-        async with driver.session() as session:
+        try:
             # Try company + role specific first
             if company:
-                result = await session.run(
+                records = await self._run_read_query(
                     """
                     MATCH (q:Question)-[:ASKED_AT]->(c:Company {name: $company})
                     WHERE q.interview_type = $interview_type
@@ -280,13 +301,12 @@ class Neo4jManager:
                     """,
                     company=company, interview_type=interview_type, limit=limit,
                 )
-                records = [dict(r) async for r in result]
                 if records:
                     return records
 
             # Fall back to role-based
             if role:
-                result = await session.run(
+                records = await self._run_read_query(
                     """
                     MATCH (q:Question)-[:TARGETS]->(r:Role)
                     WHERE q.interview_type = $interview_type
@@ -298,12 +318,11 @@ class Neo4jManager:
                     """,
                     interview_type=interview_type, role=role, limit=limit,
                 )
-                records = [dict(r) async for r in result]
                 if records:
                     return records
 
             # Final fallback: any questions of the right type
-            result = await session.run(
+            return await self._run_read_query(
                 """
                 MATCH (q:Question)
                 WHERE q.interview_type = $interview_type
@@ -314,7 +333,9 @@ class Neo4jManager:
                 """,
                 interview_type=interview_type, limit=limit,
             )
-            return [dict(r) async for r in result]
+        except (asyncio.TimeoutError, Exception) as exc:
+            logger.warning("Neo4j read timed out or failed (%s), returning empty", type(exc).__name__)
+            return []
 
     async def vector_search_questions(
         self,
@@ -326,10 +347,9 @@ class Neo4jManager:
         Semantic search over question embeddings using Neo4j vector index.
         Returns the top_k most similar questions.
         """
-        driver = await self._get_driver()
-        async with driver.session() as session:
-            # Use the vector index for approximate nearest neighbor search
-            cypher = """
+        try:
+            return await self._run_read_query(
+                """
                 CALL db.index.vector.queryNodes('question_embeddings', $top_k, $embedding)
                 YIELD node, score
                 WHERE ($interview_type = '' OR node.interview_type = $interview_type)
@@ -338,14 +358,14 @@ class Neo4jManager:
                        node.difficulty AS difficulty, score,
                        collect(DISTINCT t.name) AS topics
                 ORDER BY score DESC
-            """
-            result = await session.run(
-                cypher,
+                """,
                 embedding=query_embedding,
                 top_k=top_k,
                 interview_type=interview_type,
             )
-            return [dict(r) async for r in result]
+        except (asyncio.TimeoutError, Exception) as exc:
+            logger.warning("Neo4j vector search timed out (%s), returning empty", type(exc).__name__)
+            return []
 
     async def vector_search_answers(
         self,
@@ -356,28 +376,27 @@ class Neo4jManager:
         Semantic search over example answer embeddings.
         Returns the top_k most relevant example answers.
         """
-        driver = await self._get_driver()
-        async with driver.session() as session:
-            cypher = """
+        try:
+            return await self._run_read_query(
+                """
                 CALL db.index.vector.queryNodes('answer_embeddings', $top_k, $embedding)
                 YIELD node, score
                 OPTIONAL MATCH (node)-[:ANSWERS]->(q:Question)
                 RETURN node.text AS answer_text, node.quality AS quality,
                        q.text AS question_text, score
                 ORDER BY score DESC
-            """
-            result = await session.run(
-                cypher,
+                """,
                 embedding=query_embedding,
                 top_k=top_k,
             )
-            return [dict(r) async for r in result]
+        except (asyncio.TimeoutError, Exception) as exc:
+            logger.warning("Neo4j answer search timed out (%s), returning empty", type(exc).__name__)
+            return []
 
     async def get_example_answers(self, question_text: str, limit: int = 2) -> list[dict]:
         """Get example answers for a specific question via graph traversal."""
-        driver = await self._get_driver()
-        async with driver.session() as session:
-            result = await session.run(
+        try:
+            return await self._run_read_query(
                 """
                 MATCH (a:ExampleAnswer)-[:ANSWERS]->(q:Question {text: $question_text})
                 RETURN a.text AS answer_text, a.quality AS quality
@@ -385,7 +404,9 @@ class Neo4jManager:
                 """,
                 question_text=question_text, limit=limit,
             )
-            return [dict(r) async for r in result]
+        except (asyncio.TimeoutError, Exception) as exc:
+            logger.warning("Neo4j example answers timed out (%s), returning empty", type(exc).__name__)
+            return []
 
 
 # Singleton instance

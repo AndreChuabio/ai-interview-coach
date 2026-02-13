@@ -4,6 +4,7 @@ Interview session endpoints -- start sessions, send audio responses, receive AI 
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import logging
 
@@ -45,8 +46,15 @@ async def start_interview(req: InterviewSetupRequest):
     agent = InterviewAgent(llm=llm, session=session)
     _agents[session.session_id] = agent
 
-    # Generate the opening question
-    opening = await agent.generate_opening()
+    # Generate the opening question (timeout prevents infinite frontend hang)
+    try:
+        opening = await asyncio.wait_for(agent.generate_opening(), timeout=60.0)
+    except asyncio.TimeoutError:
+        logger.error("Opening question generation timed out after 60s")
+        raise HTTPException(
+            status_code=504,
+            detail="Interview generation timed out. Please try again.",
+        )
     tts = get_tts_provider()
     audio_bytes = await tts.synthesize(opening)
     audio_b64 = base64.b64encode(audio_bytes).decode()
@@ -119,7 +127,10 @@ async def respond(
         interviewer_text = await agent.generate_closing()
         session.status = SessionStatus.completed
     else:
-        interviewer_text = await agent.generate_followup(candidate_text)
+        interviewer_text = await agent.generate_followup(
+            candidate_response=candidate_text,
+            tone_snapshot=tone_snapshot,
+        )
 
     # Record interviewer turn
     session.transcript.append(

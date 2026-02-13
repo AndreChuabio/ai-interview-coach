@@ -1,7 +1,7 @@
 """
 Google Gemini LLM provider.
-Free tier: 15 RPM, ~1M tokens/day on gemini-2.0-flash.
-Includes retry logic for rate limit (429) errors.
+Includes retry logic for rate limit (429) errors with capped delays
+to prevent multi-minute hangs during interview startup.
 """
 
 from __future__ import annotations
@@ -19,9 +19,12 @@ from backend.providers.base import LLMProvider
 
 logger = logging.getLogger(__name__)
 
-# Retry config for rate-limited requests
-MAX_RETRIES = 3
+# Retry config for rate-limited requests.
+# Keep retries low and delays capped so the user is not stuck waiting
+# 2+ minutes on the "Starting Interview..." screen.
+MAX_RETRIES = 2
 BASE_DELAY_SEC = 5
+MAX_DELAY_SEC = 10
 
 
 class GeminiProvider(LLMProvider):
@@ -56,11 +59,12 @@ class GeminiProvider(LLMProvider):
         return "\n\n".join(parts)
 
     def _extract_retry_delay(self, error: Exception) -> float:
-        """Extract retry delay from Gemini 429 error message, or use default."""
+        """Extract retry delay from Gemini 429 error message, capped at MAX_DELAY_SEC."""
         error_str = str(error)
         match = re.search(r"retry in ([\d.]+)s", error_str)
         if match:
-            return float(match.group(1)) + 1.0
+            delay = float(match.group(1)) + 1.0
+            return min(delay, MAX_DELAY_SEC)
         return BASE_DELAY_SEC
 
     async def chat(
