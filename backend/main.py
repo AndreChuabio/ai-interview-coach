@@ -32,6 +32,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+logger.info("CORS origins: %s", settings.cors_origins)
 
 app.include_router(interview.router, prefix="/api/interview", tags=["interview"])
 app.include_router(feedback.router, prefix="/api/feedback", tags=["feedback"])
@@ -39,21 +40,16 @@ app.include_router(feedback.router, prefix="/api/feedback", tags=["feedback"])
 
 @app.on_event("startup")
 async def startup():
-    """Initialize database tables and pre-load heavy models at startup."""
+    """Initialize database tables. Heavy models are lazy-loaded on first use
+    to keep startup fast and avoid OOM on constrained hosts (Azure B1)."""
     # 1. Create database tables
     from backend.db.engine import init_db
     await init_db()
     logger.info("Database tables initialized")
 
-    # 2. Pre-load STT model (Whisper) so the first request is fast
-    try:
-        from backend.providers.factory import get_stt_provider
-        stt = get_stt_provider()
-        if hasattr(stt, "_load_model"):
-            stt._load_model()
-        logger.info("STT provider ready: %s", type(stt).__name__)
-    except Exception as exc:
-        logger.warning("Failed to pre-load STT provider: %s", exc)
+    # 2. STT / embedding models are loaded lazily on first request.
+    #    Pre-loading them here exceeds the 1.75 GB RAM on Azure B1
+    #    and causes the startup probe to time out.
 
     # 3. Warm up Neo4j connection (non-blocking, logs warning if unavailable)
     try:

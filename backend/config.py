@@ -16,7 +16,7 @@ class Settings(BaseSettings):
 
     # -- STT Provider --
     stt_provider: str = Field(default="local_whisper", description="STT provider: local_whisper, whisper_api, deepgram, google_stt")
-    stt_model: str = Field(default="base", description="Whisper model size for local: tiny, base, small, medium, large")
+    stt_model: str = Field(default="tiny", description="Whisper model size for local: tiny, base, small, medium, large")
 
     # -- TTS Provider --
     tts_provider: str = Field(default="edge_tts", description="TTS provider: edge_tts, openai_tts, elevenlabs, google_tts")
