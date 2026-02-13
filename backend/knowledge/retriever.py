@@ -143,19 +143,29 @@ class RAGRetriever:
                 len(ctx.graph_questions), interview_type, role, company,
             )
 
-            # 2. Vector similarity: find semantically similar questions
+            # 2. Vector similarity: find semantically similar questions.
+            #    Skip if the embedding model is still loading (avoids 30-60s
+            #    block on the first request on constrained hosts).
             if query_text:
                 embedder = get_embedder()
-                query_embedding = embedder.encode_single(query_text)
-                ctx.vector_questions = await neo4j_manager.vector_search_questions(
-                    query_embedding=query_embedding,
-                    top_k=5,
-                    interview_type=interview_type,
-                )
-                logger.info(
-                    "Vector retrieval: %d questions for query '%s'",
-                    len(ctx.vector_questions), query_text[:60],
-                )
+                if embedder.is_ready:
+                    query_embedding = embedder.encode_single(query_text)
+                    ctx.vector_questions = await neo4j_manager.vector_search_questions(
+                        query_embedding=query_embedding,
+                        top_k=5,
+                        interview_type=interview_type,
+                    )
+                    logger.info(
+                        "Vector retrieval: %d questions for query '%s'",
+                        len(ctx.vector_questions), query_text[:60],
+                    )
+                else:
+                    # Trigger background load so the model is ready for the
+                    # next request.  This request proceeds with graph-only context.
+                    embedder.start_background_load()
+                    logger.info(
+                        "Embedder not ready, skipping vector search (loading in background)"
+                    )
 
             # 3. Company context string
             if company:
@@ -195,6 +205,11 @@ class RAGRetriever:
 
         try:
             embedder = get_embedder()
+            if not embedder.is_ready:
+                embedder.start_background_load()
+                logger.info("Embedder not ready for feedback retrieval, skipping")
+                return ctx
+
             query_embedding = embedder.encode_single(candidate_text)
 
             # Find similar example answers
