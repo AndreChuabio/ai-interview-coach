@@ -6,10 +6,12 @@ Built for the Fordham University AI Solutions Challenge (Spring 2026).
 
 ## Key Features
 
-- **Voice-based AI interviewer** -- speak naturally; the AI asks follow-up questions based on your answers
+- **Adaptive AI interviewer** -- the interviewer reads your tone signals (pace, energy, fillers) in real time and adjusts difficulty, pacing, and follow-up strategy accordingly
+- **Voice-based conversation** -- speak naturally; the AI asks follow-up questions based on your answers and probes gaps using knowledge graph context
 - **Facial expression tracking** -- MediaPipe Face Mesh runs in-browser to detect eye contact, emotions, and head pose
 - **Tone analysis** -- librosa-powered audio analysis measures speaking pace, filler words, pitch, energy, and silence
-- **Comprehensive feedback report** -- post-interview report with content scoring, communication metrics, body language analysis, and radar chart
+- **Comprehensive feedback report** -- post-interview report with content scoring, communication metrics, body language analysis, radar chart, and temporal trend insights (e.g. "your confidence grew over the interview")
+- **Mid-interview state tracking** -- the agent tracks topic coverage, difficulty progression, and candidate performance trends across the session
 - **Provider-agnostic** -- swap LLM, STT, and TTS providers by changing a single environment variable (zero-cost defaults included)
 
 ## Architecture
@@ -42,10 +44,10 @@ Every external AI service sits behind an abstract base class. Swap providers via
 | Service | Free Option (default) | Paid Options |
 |---------|----------------------|--------------|
 | LLM     | Gemini 2.5 Flash (free tier) | OpenAI GPT-4o, Anthropic Claude, Ollama (local) |
-| STT     | Local Whisper (offline) | OpenAI Whisper API, Deepgram, Google Cloud STT |
+| STT     | Local Whisper `tiny` (offline) | OpenAI Whisper API, Deepgram, Google Cloud STT |
 | TTS     | edge-tts (free) | OpenAI TTS, ElevenLabs, Google Cloud TTS |
 
-Zero-cost development stack: Gemini free tier + local Whisper + edge-tts = $0.
+Zero-cost development stack: Gemini free tier + local Whisper (tiny) + edge-tts = $0.
 
 ## Quick Start
 
@@ -97,7 +99,7 @@ pip install -r requirements.txt
 uvicorn backend.main:app --reload --port 8000
 ```
 
-The first run downloads the Whisper `base` model (~140 MB). Subsequent starts are instant.
+The backend starts in under 5 seconds. Heavy models (Whisper STT, sentence-transformers) are loaded lazily on first use, not at startup. The first transcription request will take a few extra seconds while the model loads; subsequent requests are instant.
 
 ### 3. Frontend
 
@@ -128,10 +130,11 @@ ai-interview-coach/
 │   ├── config.py                # Provider selection via .env
 │   ├── routers/                 # API endpoints (interview, feedback)
 │   ├── services/                # Business logic
-│   │   ├── interview_agent.py   # LLM conversation + RAG integration
+│   │   ├── interview_agent.py   # Adaptive LLM conversation + RAG integration
+│   │   ├── interview_state.py   # Mid-interview state tracker (topics, difficulty, tone trends)
 │   │   ├── tone_analyzer.py     # librosa audio analysis
-│   │   ├── face_aggregator.py   # Facial expression aggregation
-│   │   └── feedback_engine.py   # Report generation + RAG benchmarking
+│   │   ├── face_aggregator.py   # Facial expression aggregation + temporal trends
+│   │   └── feedback_engine.py   # Report generation + RAG benchmarking + trend analysis
 │   ├── providers/               # Swappable AI provider layer
 │   │   ├── base.py              # Abstract base classes (LLM, STT, TTS)
 │   │   ├── factory.py           # Provider factory (reads .env)
@@ -144,8 +147,8 @@ ai-interview-coach/
 │   │   └── session_store.py     # Dual-write store (cache + DB)
 │   ├── knowledge/               # Knowledge graph + RAG
 │   │   ├── graph.py             # Neo4j connection manager + queries
-│   │   ├── embedder.py          # sentence-transformers embeddings
-│   │   ├── retriever.py         # Hybrid retriever (graph + vector)
+│   │   ├── embedder.py          # sentence-transformers embeddings (background loading)
+│   │   ├── retriever.py         # Hybrid retriever (graph + vector, graceful fallback)
 │   │   ├── seeder.py            # Neo4j seed script
 │   │   └── seed_data.py         # Curated questions, answers, companies
 │   ├── prompts/                 # System prompts per interview type
@@ -188,6 +191,8 @@ When Neo4j is configured, the interview agent and feedback engine are enriched w
 - **Role-targeted questions** -- matched via graph relationships (Question -> Role, Question -> Company)
 - **Semantic search** -- vector similarity on question/answer embeddings (all-MiniLM-L6-v2, 384-dim)
 - **Example answer benchmarking** -- feedback engine compares candidate responses against curated strong answers
+- **Dynamic per-turn RAG** -- on each follow-up, the agent queries the knowledge graph using the candidate's actual answer to find similar example responses and probe specific gaps
+- **Non-blocking model loading** -- the embedding model loads in a background thread so the first request is never blocked; vector search is skipped until the model is ready, with graceful fallback to graph-only context
 
 The RAG layer is optional. Without Neo4j credentials, the app falls back to the static question bank.
 
@@ -200,8 +205,8 @@ python -m backend.knowledge.seeder
 ## Session Persistence
 
 Sessions and feedback reports are persisted to a SQL database via SQLAlchemy:
-- **Local dev**: SQLite (zero setup, default)
-- **Production**: Swap to PostgreSQL by changing one line in `.env`
+- **Local dev**: PostgreSQL via Postgres.app or SQLite
+- **Production**: PostgreSQL via Neon (free tier) or any hosted provider
 
 ```bash
 # .env for production
@@ -214,10 +219,22 @@ DATABASE_URL=postgresql+asyncpg://user:pass@host:5432/interview_coach
 - **Backend**: FastAPI, Pydantic, SQLAlchemy, librosa, NumPy
 - **Knowledge Graph**: Neo4j AuraDB (graph traversal + vector index)
 - **Embeddings**: sentence-transformers (all-MiniLM-L6-v2)
-- **Database**: SQLite (dev) / PostgreSQL (prod)
+- **Database**: PostgreSQL (local via Postgres.app, prod via Neon)
 - **LLM**: Google Gemini / OpenAI / Anthropic / Ollama (configurable)
 - **STT**: Local Whisper / OpenAI Whisper API / Deepgram (configurable)
 - **TTS**: edge-tts / OpenAI TTS / ElevenLabs (configurable)
+
+## Adaptive Agent Workflow
+
+The interview agent is not a static Q&A bot. It maintains an internal state that evolves with every turn:
+
+1. **Real-time signal injection** -- tone analysis (pace, fillers, energy, silence) from each candidate response is passed directly into the follow-up prompt. The LLM sees that the candidate is nervous (low energy, high fillers) or confident (strong energy, minimal fillers) and calibrates its next question accordingly.
+
+2. **Mid-interview state tracking** -- an `InterviewState` object tracks questions asked/remaining, topics covered/remaining, current difficulty level, running tone averages, and energy trends. This state is injected into the system prompt on every turn so the LLM maintains awareness of interview progress.
+
+3. **Dynamic RAG refresh** -- on each follow-up, the agent queries the knowledge graph using the candidate's actual answer (not just the static opening query). It retrieves similar example answers and injects them so the LLM can probe specific gaps in the candidate's response.
+
+4. **Temporal trend analysis** -- the feedback report compares the first half of the interview to the second half. It detects and reports trends like "your confidence grew over the interview" or "filler word usage increased toward the end, suggesting fatigue."
 
 ## Current Status
 
@@ -239,9 +256,20 @@ Phase 3 complete (knowledge graph + persistence):
 - Session and report persistence via SQLAlchemy (SQLite dev / PostgreSQL prod)
 - Seeder script for populating the knowledge graph with embeddings
 
-Phase 4 planned:
-- Deployment to Vercel (frontend) + Railway (backend)
-- UI polish and demo video
+Phase 3.5 complete (adaptive agentic workflow):
+- Real-time tone signal injection into follow-up prompts
+- Mid-interview state tracker (topic coverage, difficulty progression, tone trends)
+- Dynamic per-turn RAG refresh using candidate answers as search queries
+- Temporal trend analysis in feedback reports (first-half vs second-half comparison)
+
+Phase 4 complete (deployment):
+- Backend live on Azure App Service (Python 3.11, B1 tier) at `ai--interview-coach-api.azurewebsites.net`
+- Frontend live on Vercel at `ai-interview-coach-gamma-eight.vercel.app`
+- PostgreSQL via Neon (free tier, East US 2)
+- Neo4j AuraDB (existing free instance)
+- CI/CD via GitHub Actions (auto-deploy on push to main)
+- Lazy model loading to fit within Azure B1 memory constraints (1.75 GB RAM)
+- Embedding model loads in background thread; first request uses graph-only RAG, subsequent requests get full hybrid search
 
 ## Author
 
