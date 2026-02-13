@@ -321,15 +321,87 @@ export default function InterviewSetup({ onStart, isLoading }: Props) {
           </div>
         </div>
 
-        {/* Start button */}
-        <button
-          type="submit"
-          disabled={isLoading || !role.trim()}
-          className="w-full py-3.5 px-6 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:from-gray-400 disabled:to-gray-400 text-white font-semibold text-lg transition-all duration-200 shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40"
-        >
-          {isLoading ? "Starting Interview..." : "Start Interview"}
-        </button>
+        {/* Start button / Loading overlay */}
+        {isLoading ? (
+          <LoadingOverlay />
+        ) : (
+          <button
+            type="submit"
+            disabled={!role.trim()}
+            className="w-full py-3.5 px-6 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:from-gray-400 disabled:to-gray-400 text-white font-semibold text-lg transition-all duration-200 shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40"
+          >
+            Start Interview
+          </button>
+        )}
       </form>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Loading overlay with cycling status messages                       */
+/* ------------------------------------------------------------------ */
+
+const LOADING_MESSAGES = [
+  "Preparing your interview...",
+  "Generating your first question...",
+  "Synthesizing audio...",
+  "Almost ready...",
+];
+
+function LoadingOverlay() {
+  const [messageIdx, setMessageIdx] = useState(0);
+  const [elapsed, setElapsed] = useState(0);
+
+  // Cycle status message every 3 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setMessageIdx((prev) => (prev + 1) % LOADING_MESSAGES.length);
+    }, 3000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Elapsed timer -- tick every second
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setElapsed((prev) => prev + 1);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <div className="w-full py-6 px-6 rounded-xl bg-gradient-to-r from-blue-600/10 to-indigo-600/10 border-2 border-blue-500/30 flex flex-col items-center gap-4">
+      {/* Spinner */}
+      <svg
+        className="animate-spin h-8 w-8 text-blue-500"
+        xmlns="http://www.w3.org/2000/svg"
+        fill="none"
+        viewBox="0 0 24 24"
+      >
+        <circle
+          className="opacity-25"
+          cx="12"
+          cy="12"
+          r="10"
+          stroke="currentColor"
+          strokeWidth="4"
+        />
+        <path
+          className="opacity-75"
+          fill="currentColor"
+          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+        />
+      </svg>
+
+      {/* Cycling status text */}
+      <p className="text-sm font-medium text-blue-600 dark:text-blue-400 transition-opacity duration-300">
+        {LOADING_MESSAGES[messageIdx]}
+      </p>
+
+      {/* Subtle elapsed timer */}
+      <span className="text-xs text-gray-400">
+        {elapsed}s
+      </span>
     </div>
   );
 }
