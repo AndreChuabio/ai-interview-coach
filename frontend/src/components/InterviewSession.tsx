@@ -10,6 +10,7 @@ import {
   MessageSquare,
   Activity,
   Gauge,
+  RefreshCw,
 } from "lucide-react";
 import { AudioRecorder, playAudioUrl } from "@/lib/audio";
 import FaceTracker from "@/components/FaceTracker";
@@ -29,7 +30,7 @@ interface Props {
   onComplete: (sessionId: string) => void;
 }
 
-type Phase = "loading" | "ai_speaking" | "listening" | "processing" | "done";
+type Phase = "loading" | "ai_speaking" | "listening" | "processing" | "done" | "error";
 
 interface Turn {
   role: "interviewer" | "candidate";
@@ -99,6 +100,7 @@ function PhaseIndicator({ phase }: { phase: Phase }) {
     listening: "bg-green-400 animate-pulse",
     processing: "bg-blue-400 animate-pulse",
     done: "bg-green-500",
+    error: "bg-red-500",
   };
 
   return (
@@ -120,9 +122,11 @@ export default function InterviewSession({ session, onComplete }: Props) {
   const [isRecording, setIsRecording] = useState(false);
   const [latestTone, setLatestTone] = useState<ToneSnapshot | null>(null);
   const [recordingDuration, setRecordingDuration] = useState(0);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Accumulated face data to send on interview completion
   const faceSnapshotsRef = useRef<FaceSnapshot[]>([]);
+  const lastAudioBlobRef = useRef<Blob | null>(null);
   const recorderRef = useRef<AudioRecorder | null>(null);
   const transcriptEndRef = useRef<HTMLDivElement>(null);
   const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -187,18 +191,10 @@ export default function InterviewSession({ session, onComplete }: Props) {
     }
   }, []);
 
-  // Stop recording and send to backend
-  const stopRecording = useCallback(async () => {
-    if (!recorderRef.current?.isRecording) return;
-    setIsRecording(false);
+  // Process an audio blob (shared by stopRecording and retryLastResponse)
+  const processAudioBlob = useCallback(async (audioBlob: Blob) => {
     setPhase("processing");
-
-    if (recordingTimerRef.current) {
-      clearInterval(recordingTimerRef.current);
-      recordingTimerRef.current = null;
-    }
-
-    const audioBlob = await recorderRef.current.stop();
+    setErrorMessage(null);
 
     try {
       const result: RespondResponse = await sendResponse(
@@ -227,6 +223,7 @@ export default function InterviewSession({ session, onComplete }: Props) {
       ]);
 
       setQuestionNum(result.question_number);
+      lastAudioBlobRef.current = null;
 
       if (result.is_final) {
         setPhase("done");
@@ -247,10 +244,34 @@ export default function InterviewSession({ session, onComplete }: Props) {
       }
       setPhase("listening");
     } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Something went wrong";
       console.error("Response processing failed:", err);
-      setPhase("listening");
+      setErrorMessage(message);
+      setPhase("error");
     }
   }, [session.session_id, onComplete]);
+
+  // Stop recording and send to backend
+  const stopRecording = useCallback(async () => {
+    if (!recorderRef.current?.isRecording) return;
+    setIsRecording(false);
+
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
+
+    const audioBlob = await recorderRef.current.stop();
+    lastAudioBlobRef.current = audioBlob;
+    await processAudioBlob(audioBlob);
+  }, [processAudioBlob]);
+
+  // Retry the last failed response without re-recording
+  const retryLastResponse = useCallback(async () => {
+    if (!lastAudioBlobRef.current) return;
+    await processAudioBlob(lastAudioBlobRef.current);
+  }, [processAudioBlob]);
 
   // Cleanup
   useEffect(() => {
@@ -517,6 +538,33 @@ export default function InterviewSession({ session, onComplete }: Props) {
             <div className="flex items-center gap-2 px-6 py-3 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300">
               <Loader2 className="w-5 h-5 animate-spin" />
               Preparing interview...
+            </div>
+          )}
+
+          {phase === "error" && (
+            <div className="flex flex-col items-center gap-3">
+              <div className="px-6 py-3 rounded-lg bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 text-sm text-red-700 dark:text-red-300 max-w-md text-center">
+                {errorMessage || "Something went wrong processing your response."}
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={retryLastResponse}
+                  className="flex items-center gap-2 px-6 py-2.5 rounded-full bg-red-600 hover:bg-red-700 text-white font-medium transition-colors"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  Try Again
+                </button>
+                <button
+                  onClick={() => {
+                    setErrorMessage(null);
+                    lastAudioBlobRef.current = null;
+                    setPhase("listening");
+                  }}
+                  className="px-6 py-2.5 rounded-full bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 font-medium transition-colors"
+                >
+                  Re-record
+                </button>
+              </div>
             </div>
           )}
 

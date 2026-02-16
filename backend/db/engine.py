@@ -64,9 +64,28 @@ class Base(DeclarativeBase):
 
 
 async def init_db() -> None:
-    """Create all tables that do not exist yet. Safe to call on every startup."""
+    """Create all tables that do not exist yet, and apply lightweight migrations.
+
+    Since the project does not use Alembic, new columns on existing tables
+    are added here via ALTER TABLE when missing. This keeps existing data
+    intact while evolving the schema incrementally.
+    """
+    from sqlalchemy import inspect as sa_inspect, text
+
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+        # Lightweight migration: add agent_messages_json to sessions if missing.
+        def _check_column(sync_conn):
+            inspector = sa_inspect(sync_conn)
+            columns = [c["name"] for c in inspector.get_columns("sessions")]
+            return "agent_messages_json" in columns
+
+        has_column = await conn.run_sync(_check_column)
+        if not has_column:
+            await conn.execute(
+                text("ALTER TABLE sessions ADD COLUMN agent_messages_json TEXT DEFAULT '[]'")
+            )
 
 
 async def get_db() -> AsyncSession:

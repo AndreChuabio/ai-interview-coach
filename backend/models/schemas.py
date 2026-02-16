@@ -63,6 +63,10 @@ class InterviewSession(BaseModel):
     transcript: list[TranscriptEntry] = Field(default_factory=list)
     face_data: list[FaceSnapshot] = Field(default_factory=list)
     tone_data: list[ToneSnapshot] = Field(default_factory=list)
+    # Raw LLM conversation history (prompt-level messages including tone signals
+    # and RAG blocks). Excluded from API responses but persisted to DB so the
+    # agent can be perfectly reconstructed after a server restart.
+    agent_messages: list[dict[str, str]] = Field(default_factory=list, exclude=True)
 
 
 # ---------------------------------------------------------------------------

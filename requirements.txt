@@ -39,5 +39,9 @@ greenlet>=3.0.0
 neo4j>=5.0.0
 sentence-transformers>=2.2.0
 
+# -- Reliability --
+cachetools>=5.3.0
+tenacity>=8.2.0
+
 # -- Utilities --
 aiofiles>=24.1.0

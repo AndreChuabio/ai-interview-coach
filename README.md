@@ -202,7 +202,7 @@ To seed the knowledge graph:
 python -m backend.knowledge.seeder
 ```
 
-## Session Persistence
+## Session Persistence and Reliability
 
 Sessions and feedback reports are persisted to a SQL database via SQLAlchemy:
 - **Local dev**: PostgreSQL via Postgres.app or SQLite
@@ -212,6 +212,14 @@ Sessions and feedback reports are persisted to a SQL database via SQLAlchemy:
 # .env for production
 DATABASE_URL=postgresql+asyncpg://user:pass@host:5432/interview_coach
 ```
+
+The system is designed to survive backend restarts mid-interview:
+- **Agent memory persistence** -- the raw LLM conversation history (including tone signals, RAG context blocks, and prompt templates) is persisted to the database after every turn, so agent reconstruction after a restart is lossless
+- **Bounded agent cache** -- live agents are held in a TTL cache (max 100, 1-hour expiry) to prevent unbounded memory growth; completed interviews are evicted immediately
+- **Automatic recovery** -- on a cache miss (restart, TTL expiry), the agent is rebuilt from the persisted session with full conversation context restored
+- **Provider retry with backoff** -- LLM calls retry up to 3 times with exponential backoff (2-10s) on transient failures
+- **Per-step timeouts** -- STT (30s), LLM (45s), and TTS (30s) calls are individually wrapped in timeouts to prevent indefinite hangs
+- **Frontend retry UI** -- on backend failure, users see the error and can retry (resubmits the same audio) or re-record without losing progress
 
 ## Tech Stack
 
@@ -261,6 +269,14 @@ Phase 3.5 complete (adaptive agentic workflow):
 - Mid-interview state tracker (topic coverage, difficulty progression, tone trends)
 - Dynamic per-turn RAG refresh using candidate answers as search queries
 - Temporal trend analysis in feedback reports (first-half vs second-half comparison)
+
+Phase 4.5 complete (reliability hardening):
+- Bounded TTL agent cache with automatic eviction on interview completion
+- Agent memory persistence to PostgreSQL for lossless reconstruction after restarts
+- Lightweight schema migration for new columns without Alembic
+- Per-step timeouts on STT/LLM/TTS provider calls in the respond endpoint
+- LLM retry with exponential backoff via tenacity (3 attempts, 2-10s)
+- Frontend error phase with retry and re-record buttons
 
 Phase 4 complete (deployment):
 - Backend live on Azure App Service (Python 3.11, B1 tier) at `ai--interview-coach-api.azurewebsites.net`

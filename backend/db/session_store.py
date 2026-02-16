@@ -124,6 +124,7 @@ class SessionStore:
             row.set_transcript([e.model_dump(mode="json") for e in session.transcript])
             row.set_face_data([s.model_dump(mode="json") for s in session.face_data])
             row.set_tone_data([s.model_dump(mode="json") for s in session.tone_data])
+            row.set_agent_messages(session.agent_messages)
 
             await db.commit()
 
@@ -149,6 +150,7 @@ class SessionStore:
                     transcript=[TranscriptEntry(**e) for e in row.get_transcript()],
                     face_data=[FaceSnapshot(**s) for s in row.get_face_data()],
                     tone_data=[ToneSnapshot(**s) for s in row.get_tone_data()],
+                    agent_messages=row.get_agent_messages(),
                 )
                 self._cache[session_id] = session
                 return session

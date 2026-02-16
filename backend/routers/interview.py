@@ -8,6 +8,7 @@ import asyncio
 import base64
 import logging
 
+from cachetools import TTLCache
 from fastapi import APIRouter, File, HTTPException, UploadFile
 
 from backend.db.session_store import session_store
@@ -26,8 +27,32 @@ from backend.services.tone_analyzer import ToneAnalyzer
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-# In-memory agent cache (agents are not persisted -- session data is)
-_agents: dict[str, InterviewAgent] = {}
+# In-memory agent cache with bounded size and TTL eviction.
+# maxsize=100 prevents unbounded growth; ttl=3600 (1 hour) evicts stale agents.
+_agents: TTLCache[str, InterviewAgent] = TTLCache(maxsize=100, ttl=3600)
+
+
+async def _get_or_rebuild_agent(session_id: str) -> tuple[InterviewSession, InterviewAgent] | None:
+    """Look up agent from cache; on miss, rebuild from the persisted session.
+
+    Returns (session, agent) or None if the session does not exist in the DB either.
+    This allows interviews to survive backend restarts: the transcript and tone data
+    are persisted in PostgreSQL, so the agent can be reconstructed on demand.
+    """
+    session = await session_store.get_session(session_id)
+    if session is None:
+        return None
+
+    agent = _agents.get(session_id)
+    if agent is not None:
+        return session, agent
+
+    # Cache miss -- rebuild agent from DB-persisted session
+    llm = get_llm_provider()
+    agent = InterviewAgent.from_persisted_session(llm=llm, session=session)
+    _agents[session_id] = agent
+    logger.info("Rebuilt agent for session %s after cache miss", session_id)
+    return session, agent
 
 
 @router.post("/start", response_model=InterviewSession)
@@ -90,22 +115,31 @@ async def respond(
     3. Generate interviewer follow-up (LLM provider)
     4. Synthesize follow-up audio (TTS provider)
     """
-    session = await session_store.get_session(session_id)
-    agent = _agents.get(session_id)
-    if not session or not agent:
+    result = await _get_or_rebuild_agent(session_id)
+    if result is None:
         raise HTTPException(status_code=404, detail="Session not found")
+    session, agent = result
 
     if session.status == SessionStatus.completed:
         raise HTTPException(status_code=400, detail="Interview already completed")
 
     audio_bytes = await audio.read()
 
-    # STT -- transcribe candidate response
+    # STT -- transcribe candidate response (30s timeout)
     stt = get_stt_provider()
-    candidate_text = await stt.transcribe(audio_bytes)
+    try:
+        candidate_text = await asyncio.wait_for(
+            stt.transcribe(audio_bytes), timeout=30.0
+        )
+    except asyncio.TimeoutError:
+        logger.error("STT timed out after 30s for session %s", session_id)
+        raise HTTPException(
+            status_code=504,
+            detail="Speech transcription timed out. Please try again.",
+        )
     logger.info("STT result: %s", candidate_text[:120])
 
-    # Tone analysis (runs in parallel with LLM in the future)
+    # Tone analysis
     tone_analyzer = ToneAnalyzer()
     tone_snapshot = tone_analyzer.analyze(audio_bytes)
     session.tone_data.append(tone_snapshot)
@@ -123,13 +157,26 @@ async def respond(
     question_count = sum(1 for t in session.transcript if t.role == "interviewer")
     is_final = question_count >= session.num_questions
 
-    if is_final:
-        interviewer_text = await agent.generate_closing()
-        session.status = SessionStatus.completed
-    else:
-        interviewer_text = await agent.generate_followup(
-            candidate_response=candidate_text,
-            tone_snapshot=tone_snapshot,
+    # LLM -- generate follow-up or closing (45s timeout)
+    try:
+        if is_final:
+            interviewer_text = await asyncio.wait_for(
+                agent.generate_closing(), timeout=45.0
+            )
+            session.status = SessionStatus.completed
+        else:
+            interviewer_text = await asyncio.wait_for(
+                agent.generate_followup(
+                    candidate_response=candidate_text,
+                    tone_snapshot=tone_snapshot,
+                ),
+                timeout=45.0,
+            )
+    except asyncio.TimeoutError:
+        logger.error("LLM timed out after 45s for session %s", session_id)
+        raise HTTPException(
+            status_code=504,
+            detail="Response generation timed out. Please try again.",
         )
 
     # Record interviewer turn
@@ -137,13 +184,26 @@ async def respond(
         TranscriptEntry(role="interviewer", text=interviewer_text)
     )
 
-    # TTS -- synthesize interviewer response
+    # TTS -- synthesize interviewer response (30s timeout)
     tts = get_tts_provider()
-    audio_response = await tts.synthesize(interviewer_text)
+    try:
+        audio_response = await asyncio.wait_for(
+            tts.synthesize(interviewer_text), timeout=30.0
+        )
+    except asyncio.TimeoutError:
+        logger.error("TTS timed out after 30s for session %s", session_id)
+        raise HTTPException(
+            status_code=504,
+            detail="Audio synthesis timed out. Please try again.",
+        )
     audio_b64 = base64.b64encode(audio_response).decode()
 
     # Persist updated session
     await session_store.update_session(session)
+
+    # Evict the agent from cache once the interview is done
+    if is_final:
+        _agents.pop(session_id, None)
 
     return RespondResponse(
         session_id=session_id,
@@ -171,10 +231,10 @@ async def submit_face_data(session_id: str, batch: FaceDataBatch):
 @router.get("/opening-audio/{session_id}")
 async def get_opening_audio(session_id: str):
     """Get the TTS audio for the first interviewer question."""
-    session = await session_store.get_session(session_id)
-    agent = _agents.get(session_id)
-    if not session or not agent:
+    result = await _get_or_rebuild_agent(session_id)
+    if result is None:
         raise HTTPException(status_code=404, detail="Session not found")
+    session, _agent = result
 
     opening_text = ""
     for entry in session.transcript:

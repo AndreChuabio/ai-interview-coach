@@ -17,6 +17,8 @@ import logging
 import random
 from pathlib import Path
 
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+
 from backend.models.schemas import InterviewSession, InterviewType, ToneSnapshot
 from backend.prompts import behavioral, case_study, technical
 from backend.providers.base import LLMProvider
@@ -176,6 +178,67 @@ class InterviewAgent:
         # Full prompt is assembled in generate_opening after RAG retrieval
         self._system_prompt = self._base_system_prompt
 
+    @classmethod
+    def from_persisted_session(
+        cls, llm: LLMProvider, session: InterviewSession
+    ) -> InterviewAgent:
+        """Reconstruct an agent from a DB-loaded session after a server restart.
+
+        When agent_messages are available (persisted prompt-level history),
+        uses them directly for perfect reconstruction including tone signals,
+        RAG context blocks, and template structure.
+
+        Falls back to replaying the transcript when agent_messages are empty
+        (backwards compatibility with sessions created before this field existed).
+        """
+        agent = cls(llm=llm, session=session)
+
+        if session.agent_messages:
+            # Perfect reconstruction from persisted prompt-level messages
+            agent._messages = list(session.agent_messages)
+            logger.info(
+                "Restored %d prompt-level messages for session %s",
+                len(agent._messages),
+                session.session_id,
+            )
+        else:
+            # Fallback: replay transcript into _messages (loses prompt structure)
+            for entry in session.transcript:
+                if entry.role == "interviewer":
+                    agent._messages.append({"role": "assistant", "content": entry.text})
+                else:
+                    agent._messages.append({"role": "user", "content": entry.text})
+            logger.info(
+                "Replayed %d transcript entries for session %s (no agent_messages stored)",
+                len(agent._messages),
+                session.session_id,
+            )
+
+        # Restore interview state from persisted data
+        questions_asked = sum(1 for e in session.transcript if e.role == "interviewer")
+        agent._state.questions_asked = questions_asked
+        agent._state.questions_remaining = max(
+            0, session.num_questions - questions_asked
+        )
+
+        # Replay tone snapshots so running averages and trends are restored
+        for snapshot in session.tone_data:
+            agent._state.update_tone(snapshot)
+
+        # Rebuild system prompt with restored state
+        agent._system_prompt = agent._build_system_prompt()
+
+        return agent
+
+    def _sync_messages_to_session(self) -> None:
+        """Copy the current _messages list to the session for DB persistence.
+
+        This preserves the full prompt-level conversation history (including
+        tone signal blocks, RAG context, and template structure) so the agent
+        can be perfectly reconstructed after a server restart.
+        """
+        self._session.agent_messages = list(self._messages)
+
     def _build_system_prompt(self) -> str:
         """Assemble the full system prompt with RAG context and interview state."""
         parts = [self._base_system_prompt]
@@ -262,6 +325,7 @@ class InterviewAgent:
         )
         self._messages.append({"role": "assistant", "content": response})
         self._state.record_question()
+        self._sync_messages_to_session()
         logger.info("Opening question generated (%d chars)", len(response))
         return response
 
@@ -276,6 +340,8 @@ class InterviewAgent:
         When a tone_snapshot is provided, the agent injects real-time signals
         into the prompt so the LLM can adapt its approach (difficulty, pacing,
         encouragement) based on how the candidate sounds.
+
+        Retries up to 2 times with exponential backoff on transient LLM errors.
 
         Args:
             candidate_response: Transcribed text of the candidate's answer.
@@ -307,29 +373,45 @@ class InterviewAgent:
         # Rebuild system prompt with updated state
         self._system_prompt = self._build_system_prompt()
 
-        response = await self._llm.chat(
-            messages=self._messages,
-            system_prompt=self._system_prompt,
-            temperature=0.7,
-        )
+        response = await self._call_llm_with_retry(temperature=0.7)
         self._messages.append({"role": "assistant", "content": response})
         self._state.record_question()
+        self._sync_messages_to_session()
         logger.info("Follow-up generated (%d chars)", len(response))
         return response
 
     async def generate_closing(self) -> str:
-        """Generate a closing statement to end the interview."""
+        """Generate a closing statement to end the interview.
+
+        Retries up to 2 times with exponential backoff on transient LLM errors.
+        """
         user_msg = self._prompts.CLOSING_TEMPLATE
         self._messages.append({"role": "user", "content": user_msg})
 
-        response = await self._llm.chat(
-            messages=self._messages,
-            system_prompt=self._system_prompt,
-            temperature=0.5,
-        )
+        response = await self._call_llm_with_retry(temperature=0.5)
         self._messages.append({"role": "assistant", "content": response})
+        self._sync_messages_to_session()
         logger.info("Closing statement generated")
         return response
+
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=2, min=2, max=10),
+        retry=retry_if_exception_type(Exception),
+        reraise=True,
+        before_sleep=lambda retry_state: logger.warning(
+            "LLM call failed (attempt %d), retrying: %s",
+            retry_state.attempt_number,
+            retry_state.outcome.exception() if retry_state.outcome else "unknown",
+        ),
+    )
+    async def _call_llm_with_retry(self, temperature: float = 0.7) -> str:
+        """Call the LLM with retry logic for transient failures."""
+        return await self._llm.chat(
+            messages=self._messages,
+            system_prompt=self._system_prompt,
+            temperature=temperature,
+        )
 
     def get_full_transcript_text(self) -> str:
         """Return the full conversation as a formatted string for feedback analysis."""

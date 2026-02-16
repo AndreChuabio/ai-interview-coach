@@ -46,6 +46,11 @@ class SessionRow(Base):
     # Tone data stored as JSON text -- list of ToneSnapshot dicts
     tone_data_json: Mapped[str] = mapped_column(Text, default="[]")
 
+    # Raw LLM conversation history -- list of {role, content} dicts
+    # Preserves prompt-level structure (tone signals, RAG blocks) for
+    # perfect agent reconstruction after server restarts.
+    agent_messages_json: Mapped[str] = mapped_column(Text, default="[]")
+
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 
@@ -68,6 +73,15 @@ class SessionRow(Base):
 
     def get_tone_data(self) -> list[dict]:
         return json.loads(self.tone_data_json) if self.tone_data_json else []
+
+    def set_agent_messages(self, messages: list[dict]) -> None:
+        self.agent_messages_json = json.dumps(messages, default=str)
+
+    def get_agent_messages(self) -> list[dict]:
+        try:
+            return json.loads(self.agent_messages_json) if self.agent_messages_json else []
+        except (json.JSONDecodeError, AttributeError):
+            return []
 
 
 class ReportRow(Base):
