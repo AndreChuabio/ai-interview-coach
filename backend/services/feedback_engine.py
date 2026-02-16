@@ -6,7 +6,6 @@ into a comprehensive post-interview feedback report.
 
 from __future__ import annotations
 
-import json
 import logging
 
 from backend.models.schemas import (
@@ -184,7 +183,12 @@ class FeedbackEngine:
             )
 
     def _analyze_communication(self, tone_data: list[ToneSnapshot]) -> CommunicationScore:
-        """Aggregate tone snapshots into a communication score."""
+        """Aggregate tone snapshots into a communication score.
+
+        Uses a multi-factor confidence formula that considers energy,
+        pitch variation, jitter (vocal stability), rising intonation
+        (assertiveness), and speaking pace.
+        """
         if not tone_data:
             return CommunicationScore(
                 overall_score=5.0,
@@ -196,14 +200,25 @@ class FeedbackEngine:
                 improvements=["Enable microphone for communication feedback"],
             )
 
+        n = len(tone_data)
+
         # Aggregate metrics across all turns
         wpms = [t.speaking_pace_wpm for t in tone_data if t.speaking_pace_wpm > 0]
         avg_wpm = sum(wpms) / len(wpms) if wpms else 0.0
         total_fillers = sum(t.filler_word_count for t in tone_data)
-        avg_energy = sum(t.energy_level for t in tone_data) / len(tone_data)
-        avg_silence = sum(t.silence_ratio for t in tone_data) / len(tone_data)
+        avg_energy = sum(t.energy_level for t in tone_data) / n
+        avg_silence = sum(t.silence_ratio for t in tone_data) / n
 
+        # New prosody and voice quality aggregates
+        avg_jitter = sum(t.jitter for t in tone_data) / n
+        avg_shimmer = sum(t.shimmer for t in tone_data) / n
+        avg_rising = sum(t.rising_intonation_ratio for t in tone_data) / n
+        monotone_count = sum(1 for t in tone_data if t.monotone_flag)
+        avg_pitch_var = sum(t.pitch_variation for t in tone_data) / n
+
+        # ---------------------------------------------------------------
         # Pace scoring (ideal: 130-160 WPM)
+        # ---------------------------------------------------------------
         if 130 <= avg_wpm <= 160:
             pace_score = 9.0
         elif 110 <= avg_wpm <= 180:
@@ -213,7 +228,9 @@ class FeedbackEngine:
         else:
             pace_score = 5.0
 
+        # ---------------------------------------------------------------
         # Filler scoring
+        # ---------------------------------------------------------------
         total_duration = sum(t.duration_sec for t in tone_data)
         fillers_per_min = (total_fillers / total_duration * 60) if total_duration > 0 else 0
         if fillers_per_min <= 2:
@@ -225,13 +242,70 @@ class FeedbackEngine:
         else:
             filler_score = 3.0
 
-        # Clarity scoring (based on energy + silence ratio)
+        # ---------------------------------------------------------------
+        # Clarity scoring (energy + silence ratio)
+        # ---------------------------------------------------------------
         clarity_score = min(10.0, max(0.0, (avg_energy * 10 + (1 - avg_silence) * 5)))
 
-        # Confidence scoring (based on pitch variation and energy)
-        avg_pitch_var = sum(t.pitch_variation for t in tone_data) / len(tone_data)
-        confidence_raw = avg_energy * 5 + min(1.0, avg_pitch_var / 100) * 5
-        confidence_score = min(10.0, max(0.0, confidence_raw))
+        # ---------------------------------------------------------------
+        # Confidence scoring -- multi-factor formula
+        # Each component maps its metric to a 0-10 sub-score, then they
+        # are averaged with equal weights.
+        # ---------------------------------------------------------------
+
+        # Energy component: moderate energy (0.4-0.7) is ideal
+        if 0.4 <= avg_energy <= 0.7:
+            energy_comp = 9.0
+        elif 0.25 <= avg_energy <= 0.85:
+            energy_comp = 7.0
+        elif avg_energy > 0:
+            energy_comp = 4.0
+        else:
+            energy_comp = 2.0
+
+        # Pitch variation component: some variation is good (expressive),
+        # too much is erratic, too little is monotone.
+        pitch_var_norm = min(1.0, avg_pitch_var / 100) if avg_pitch_var > 0 else 0.0
+        if 0.15 <= pitch_var_norm <= 0.6:
+            pitch_var_comp = 9.0
+        elif 0.05 <= pitch_var_norm <= 0.8:
+            pitch_var_comp = 7.0
+        else:
+            pitch_var_comp = 4.0
+
+        # Jitter component: lower jitter = more stable voice = more confident.
+        # Typical conversational jitter is 0.01-0.03; above 0.05 signals stress.
+        if avg_jitter < 0.02:
+            jitter_comp = 9.0
+        elif avg_jitter < 0.04:
+            jitter_comp = 7.0
+        elif avg_jitter < 0.06:
+            jitter_comp = 5.0
+        else:
+            jitter_comp = 3.0
+
+        # Intonation component: lower rising intonation = more assertive.
+        # High rising ratio (uptalk) signals uncertainty.
+        if avg_rising < 0.15:
+            intonation_comp = 9.0
+        elif avg_rising < 0.30:
+            intonation_comp = 7.0
+        elif avg_rising < 0.50:
+            intonation_comp = 5.0
+        else:
+            intonation_comp = 3.0
+
+        # Pace component: mirrors pace_score (good pace correlates with confidence).
+        pace_comp = pace_score
+
+        confidence_score = min(10.0, max(0.0, round(
+            energy_comp * 0.2
+            + pitch_var_comp * 0.2
+            + jitter_comp * 0.2
+            + intonation_comp * 0.2
+            + pace_comp * 0.2,
+            1,
+        )))
 
         overall = round(
             pace_score * 0.25 + filler_score * 0.25 + clarity_score * 0.25 + confidence_score * 0.25,
@@ -241,6 +315,7 @@ class FeedbackEngine:
         strengths: list[str] = []
         improvements: list[str] = []
 
+        # Pace feedback
         if pace_score >= 7:
             strengths.append(f"Good speaking pace ({avg_wpm:.0f} WPM)")
         else:
@@ -249,6 +324,7 @@ class FeedbackEngine:
                 f"Speaking pace was too {speed} ({avg_wpm:.0f} WPM). Aim for 130-160 WPM."
             )
 
+        # Filler feedback
         if filler_score >= 7:
             strengths.append(f"Minimal filler words ({total_fillers} total)")
         else:
@@ -257,10 +333,32 @@ class FeedbackEngine:
                 "Practice pausing instead of using um/uh/like."
             )
 
+        # Confidence feedback
         if confidence_score >= 7:
             strengths.append("Voice projected confidence and energy")
         elif avg_energy < 0.3:
             improvements.append("Voice energy was low. Speak with more projection and enthusiasm.")
+
+        # Prosody-specific feedback
+        if monotone_count > n * 0.5:
+            improvements.append(
+                "Delivery was monotone for most of the interview. "
+                "Vary your pitch to emphasize key points and maintain engagement."
+            )
+        if avg_rising > 0.35:
+            improvements.append(
+                "Frequent rising intonation (uptalk) was detected, which can sound uncertain. "
+                "Practice ending statements with a downward inflection."
+            )
+
+        # Vocal stability feedback
+        if avg_jitter > 0.05:
+            improvements.append(
+                "Vocal instability was detected (possible sign of nervousness). "
+                "Practice breathing exercises to steady your voice."
+            )
+        elif avg_jitter < 0.02 and avg_shimmer < 0.1:
+            strengths.append("Consistent and stable vocal delivery")
 
         # Temporal trend analysis: compare first half vs second half
         if len(tone_data) >= 2:

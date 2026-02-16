@@ -27,8 +27,10 @@ class SessionRow(Base):
 
     __tablename__ = "sessions"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    session_id: Mapped[str] = mapped_column(String(24), unique=True, index=True, default=_new_id)
+    id: Mapped[int] = mapped_column(
+        Integer, primary_key=True, autoincrement=True)
+    session_id: Mapped[str] = mapped_column(
+        String(24), unique=True, index=True, default=_new_id)
 
     interview_type: Mapped[str] = mapped_column(String(32))
     role: Mapped[str] = mapped_column(String(256))
@@ -51,8 +53,10 @@ class SessionRow(Base):
     # perfect agent reconstruction after server restarts.
     agent_messages_json: Mapped[str] = mapped_column(Text, default="[]")
 
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now())
 
     # --- helpers ---
 
@@ -89,7 +93,8 @@ class ReportRow(Base):
 
     __tablename__ = "reports"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(
+        Integer, primary_key=True, autoincrement=True)
     session_id: Mapped[str] = mapped_column(String(24), index=True)
 
     overall_score: Mapped[float] = mapped_column(Float, default=0.0)
@@ -97,7 +102,8 @@ class ReportRow(Base):
     # Full report stored as JSON (the entire FeedbackReport dict)
     report_json: Mapped[str] = mapped_column(Text, default="{}")
 
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now())
 
     def set_report(self, report_dict: dict) -> None:
         self.report_json = json.dumps(report_dict, default=str)

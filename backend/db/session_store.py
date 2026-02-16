@@ -49,7 +49,8 @@ class SessionStore:
         try:
             await self._upsert_session_row(session)
         except Exception:
-            logger.exception("Failed to persist session %s to DB", session.session_id)
+            logger.exception(
+                "Failed to persist session %s to DB", session.session_id)
 
     async def get_session(self, session_id: str) -> InterviewSession | None:
         """Retrieve a session, preferring cache, falling back to DB."""
@@ -76,9 +77,11 @@ class SessionStore:
                 row.set_report(report.model_dump(mode="json"))
                 db.add(row)
                 await db.commit()
-                logger.info("Saved report for session %s (score=%.1f)", report.session_id, report.overall_score)
+                logger.info("Saved report for session %s (score=%.1f)",
+                            report.session_id, report.overall_score)
         except Exception:
-            logger.exception("Failed to persist report for session %s", report.session_id)
+            logger.exception(
+                "Failed to persist report for session %s", report.session_id)
 
     async def get_report(self, session_id: str) -> FeedbackReport | None:
         """Load the most recent report for a session from the database."""
@@ -96,7 +99,8 @@ class SessionStore:
                     return None
                 return FeedbackReport(**row.get_report())
         except Exception:
-            logger.exception("Failed to load report for session %s", session_id)
+            logger.exception(
+                "Failed to load report for session %s", session_id)
             return None
 
     # ------------------------------------------------------------------
@@ -106,7 +110,8 @@ class SessionStore:
     async def _upsert_session_row(self, session: InterviewSession) -> None:
         """Insert or update the session row in the database."""
         async with async_session_factory() as db:
-            stmt = select(SessionRow).where(SessionRow.session_id == session.session_id)
+            stmt = select(SessionRow).where(
+                SessionRow.session_id == session.session_id)
             result = await db.execute(stmt)
             row = result.scalar_one_or_none()
 
@@ -121,9 +126,12 @@ class SessionStore:
             row.num_questions = session.num_questions
             row.status = session.status.value
 
-            row.set_transcript([e.model_dump(mode="json") for e in session.transcript])
-            row.set_face_data([s.model_dump(mode="json") for s in session.face_data])
-            row.set_tone_data([s.model_dump(mode="json") for s in session.tone_data])
+            row.set_transcript([e.model_dump(mode="json")
+                               for e in session.transcript])
+            row.set_face_data([s.model_dump(mode="json")
+                              for s in session.face_data])
+            row.set_tone_data([s.model_dump(mode="json")
+                              for s in session.tone_data])
             row.set_agent_messages(session.agent_messages)
 
             await db.commit()
@@ -132,7 +140,8 @@ class SessionStore:
         """Load a session from the database into an InterviewSession Pydantic model."""
         try:
             async with async_session_factory() as db:
-                stmt = select(SessionRow).where(SessionRow.session_id == session_id)
+                stmt = select(SessionRow).where(
+                    SessionRow.session_id == session_id)
                 result = await db.execute(stmt)
                 row = result.scalar_one_or_none()
                 if row is None:
@@ -147,7 +156,8 @@ class SessionStore:
                     num_questions=row.num_questions,
                     status=SessionStatus(row.status),
                     created_at=row.created_at or datetime.utcnow(),
-                    transcript=[TranscriptEntry(**e) for e in row.get_transcript()],
+                    transcript=[TranscriptEntry(**e)
+                                for e in row.get_transcript()],
                     face_data=[FaceSnapshot(**s) for s in row.get_face_data()],
                     tone_data=[ToneSnapshot(**s) for s in row.get_tone_data()],
                     agent_messages=row.get_agent_messages(),

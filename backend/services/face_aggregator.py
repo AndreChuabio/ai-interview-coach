@@ -66,9 +66,14 @@ class FaceAggregator:
 
         # Compute overall score
         eye_score = min(10.0, eye_contact_pct / 10)
-        confidence_pct = emotion_distribution.get("confident", 0) + emotion_distribution.get("happy", 0)
+        # "focused" is a positive signal alongside "confident" and "happy"
+        positive_pct = (
+            emotion_distribution.get("confident", 0)
+            + emotion_distribution.get("happy", 0)
+            + emotion_distribution.get("focused", 0)
+        )
         nervous_pct = emotion_distribution.get("nervous", 0)
-        emotion_score = min(10.0, max(0.0, 5.0 + (confidence_pct - nervous_pct) / 20))
+        emotion_score = min(10.0, max(0.0, 5.0 + (positive_pct - nervous_pct) / 20))
         fidget_score_inv = max(0.0, 10.0 - fidgeting_score)
 
         overall = round((eye_score * 0.4 + emotion_score * 0.3 + fidget_score_inv * 0.3), 1)
@@ -84,8 +89,11 @@ class FaceAggregator:
                 f"Eye contact was low ({eye_contact_pct:.0f}%). Practice looking at the camera."
             )
 
-        if confidence_pct > 40:
+        focused_pct = emotion_distribution.get("focused", 0)
+        if positive_pct > 40:
             strengths.append("Appeared confident and positive throughout")
+        if focused_pct > 30:
+            strengths.append("Appeared focused and engaged during the interview")
         if nervous_pct > 30:
             improvements.append(
                 "Appeared nervous for a significant portion. Practice deep breathing before interviews."

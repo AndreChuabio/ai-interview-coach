@@ -39,8 +39,5 @@ frontend/out/
 # SQLite database
 *.db
 
-# Personal docs (not for public)
-docs/
-
 # Logs
 *.log

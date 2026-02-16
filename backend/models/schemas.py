@@ -35,6 +35,7 @@ class Emotion(str, Enum):
     nervous = "nervous"
     confused = "confused"
     surprised = "surprised"
+    focused = "focused"
 
 
 # ---------------------------------------------------------------------------
@@ -44,7 +45,8 @@ class Emotion(str, Enum):
 class InterviewSetupRequest(BaseModel):
     """Request to start a new interview session."""
     interview_type: InterviewType = InterviewType.behavioral
-    role: str = Field(default="Software Engineer", description="Target job role")
+    role: str = Field(default="Software Engineer",
+                      description="Target job role")
     company: str = Field(default="", description="Target company (optional)")
     difficulty: str = Field(default="medium", description="easy, medium, hard")
     num_questions: int = Field(default=5, ge=1, le=15)
@@ -66,7 +68,8 @@ class InterviewSession(BaseModel):
     # Raw LLM conversation history (prompt-level messages including tone signals
     # and RAG blocks). Excluded from API responses but persisted to DB so the
     # agent can be perfectly reconstructed after a server restart.
-    agent_messages: list[dict[str, str]] = Field(default_factory=list, exclude=True)
+    agent_messages: list[dict[str, str]] = Field(
+        default_factory=list, exclude=True)
 
 
 # ---------------------------------------------------------------------------
@@ -89,11 +92,14 @@ class RespondRequest(BaseModel):
 class RespondResponse(BaseModel):
     """Response returned after processing a candidate turn."""
     session_id: str
-    transcript_text: str = Field(description="What the candidate said (STT output)")
+    transcript_text: str = Field(
+        description="What the candidate said (STT output)")
     interviewer_text: str = Field(description="The interviewer follow-up text")
-    interviewer_audio_url: str = Field(default="", description="URL or base64 of TTS audio")
+    interviewer_audio_url: str = Field(
+        default="", description="URL or base64 of TTS audio")
     question_number: int
-    is_final: bool = Field(default=False, description="True if interview is complete")
+    is_final: bool = Field(
+        default=False, description="True if interview is complete")
     tone_snapshot: Optional[ToneSnapshot] = None
 
 
@@ -123,13 +129,29 @@ class FaceDataBatch(BaseModel):
 
 class ToneSnapshot(BaseModel):
     """Audio analysis results for a single candidate turn."""
-    speaking_pace_wpm: float = Field(default=0.0, description="Words per minute")
+    speaking_pace_wpm: float = Field(
+        default=0.0, description="Words per minute")
     filler_word_count: int = Field(default=0)
     filler_words: list[str] = Field(default_factory=list)
     avg_pitch_hz: float = Field(default=0.0)
     pitch_variation: float = Field(default=0.0)
+    pitch_range_hz: float = Field(
+        default=0.0, description="Max minus min pitch in Hz")
+    rising_intonation_ratio: float = Field(
+        default=0.0,
+        description="Fraction of speech segments ending with rising pitch")
+    monotone_flag: bool = Field(
+        default=False,
+        description="True when pitch variation is very low relative to mean")
+    jitter: float = Field(
+        default=0.0,
+        description="Cycle-to-cycle pitch variation (vocal stability)")
+    shimmer: float = Field(
+        default=0.0,
+        description="Cycle-to-cycle amplitude variation (vocal stability)")
     energy_level: float = Field(default=0.0, description="Normalized 0-1")
-    silence_ratio: float = Field(default=0.0, description="Fraction of audio that is silence")
+    silence_ratio: float = Field(
+        default=0.0, description="Fraction of audio that is silence")
     duration_sec: float = Field(default=0.0)
 
 

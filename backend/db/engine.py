@@ -84,7 +84,8 @@ async def init_db() -> None:
         has_column = await conn.run_sync(_check_column)
         if not has_column:
             await conn.execute(
-                text("ALTER TABLE sessions ADD COLUMN agent_messages_json TEXT DEFAULT '[]'")
+                text(
+                    "ALTER TABLE sessions ADD COLUMN agent_messages_json TEXT DEFAULT '[]'")
             )
 
 

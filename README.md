@@ -8,8 +8,8 @@ Built for the Fordham University AI Solutions Challenge (Spring 2026).
 
 - **Adaptive AI interviewer** -- the interviewer reads your tone signals (pace, energy, fillers) in real time and adjusts difficulty, pacing, and follow-up strategy accordingly
 - **Voice-based conversation** -- speak naturally; the AI asks follow-up questions based on your answers and probes gaps using knowledge graph context
-- **Facial expression tracking** -- MediaPipe Face Mesh runs in-browser to detect eye contact, emotions, and head pose
-- **Tone analysis** -- librosa-powered audio analysis measures speaking pace, filler words, pitch, energy, and silence
+- **Facial expression tracking** -- MediaPipe Face Mesh runs in-browser with resting-face calibration, temporal smoothing, and 7 emotion categories (neutral, happy, confident, nervous, surprised, confused, focused) classified from calibrated blendshape heuristics
+- **Tone analysis** -- librosa-powered audio analysis measures speaking pace, filler words (context-aware detection), pitch, prosody (intonation patterns, monotone detection), voice quality (jitter, shimmer), energy (adaptive normalization), and silence
 - **Comprehensive feedback report** -- post-interview report with content scoring, communication metrics, body language analysis, radar chart, and temporal trend insights (e.g. "your confidence grew over the interview")
 - **Mid-interview state tracking** -- the agent tracks topic coverage, difficulty progression, and candidate performance trends across the session
 - **Provider-agnostic** -- swap LLM, STT, and TTS providers by changing a single environment variable (zero-cost defaults included)
@@ -249,12 +249,13 @@ The interview agent is not a static Q&A bot. It maintains an internal state that
 Phase 1-2 complete (voice pipeline + real-time analysis):
 - Voice conversation pipeline (STT -> LLM -> TTS) working end-to-end
 - Provider abstraction layer with free-tier defaults and retry logic
-- MediaPipe face tracking with real-time expression indicators
-- librosa tone analysis (pace, fillers, pitch, energy, silence ratio)
+- MediaPipe face tracking with resting-face calibration, temporal smoothing (EMA), and 7-emotion classification (neutral, happy, confident, nervous, surprised, confused, focused) using calibrated blendshape heuristics with cheekSquint, lipPress, eyeSquint, and noseSneer action units
+- librosa tone analysis with context-aware filler word detection (regex word-boundary matching), prosody analysis (rising intonation ratio, monotone detection, pitch range), voice quality metrics (jitter, shimmer), and adaptive percentile-based energy normalization
+- Multi-factor confidence scoring (energy, pitch variation, vocal stability, intonation assertiveness, pace)
 - Interview setup UI with type/role/company/difficulty selection
 - Live transcript with per-turn tone metrics
-- Face tracker sidebar with eye contact and emotion detection
-- Feedback report page with radar chart and per-category scoring
+- Face tracker sidebar with eye contact, emotion detection, and calibration overlay
+- Feedback report page with radar chart, per-category scoring, and prosody-specific insights
 
 Phase 3 complete (knowledge graph + persistence):
 - Neo4j AuraDB knowledge graph with 15 companies, 12 roles, 16 topics, 14 questions, example answers

@@ -156,7 +156,8 @@ class InterviewAgent:
         # Initialize interview state for adaptive behavior
         all_topics = _get_topic_list(session.interview_type, session.role)
         sample_size = min(6, len(all_topics))
-        session_topics = random.sample(all_topics, sample_size) if all_topics else []
+        session_topics = random.sample(
+            all_topics, sample_size) if all_topics else []
 
         self._state = InterviewState(
             questions_remaining=session.num_questions,
@@ -205,9 +206,11 @@ class InterviewAgent:
             # Fallback: replay transcript into _messages (loses prompt structure)
             for entry in session.transcript:
                 if entry.role == "interviewer":
-                    agent._messages.append({"role": "assistant", "content": entry.text})
+                    agent._messages.append(
+                        {"role": "assistant", "content": entry.text})
                 else:
-                    agent._messages.append({"role": "user", "content": entry.text})
+                    agent._messages.append(
+                        {"role": "user", "content": entry.text})
             logger.info(
                 "Replayed %d transcript entries for session %s (no agent_messages stored)",
                 len(agent._messages),
@@ -215,7 +218,8 @@ class InterviewAgent:
             )
 
         # Restore interview state from persisted data
-        questions_asked = sum(1 for e in session.transcript if e.role == "interviewer")
+        questions_asked = sum(
+            1 for e in session.transcript if e.role == "interviewer")
         agent._state.questions_asked = questions_asked
         agent._state.questions_remaining = max(
             0, session.num_questions - questions_asked
@@ -243,7 +247,8 @@ class InterviewAgent:
         """Assemble the full system prompt with RAG context and interview state."""
         parts = [self._base_system_prompt]
         if self._rag_context_text:
-            parts.append(f"\n\n--- Knowledge Graph Context ---\n{self._rag_context_text}")
+            parts.append(
+                f"\n\n--- Knowledge Graph Context ---\n{self._rag_context_text}")
         if self._state.questions_asked > 0:
             parts.append(f"\n\n{self._state.format_for_prompt()}")
         return "".join(parts)
@@ -270,7 +275,8 @@ class InterviewAgent:
                 self._rag_context_text = new_text
                 logger.info("RAG context injected (%d chars)", len(new_text))
             else:
-                logger.info("RAG returned empty context, using static prompt only")
+                logger.info(
+                    "RAG returned empty context, using static prompt only")
         except Exception:
             logger.warning(
                 "RAG enrichment failed, continuing with existing prompt", exc_info=True
@@ -362,7 +368,8 @@ class InterviewAgent:
         # Append tone signals so the LLM can adapt
         signal_block = ""
         if tone_snapshot:
-            signal_block = "\n\n" + self._state.format_tone_for_followup(tone_snapshot)
+            signal_block = "\n\n" + \
+                self._state.format_tone_for_followup(tone_snapshot)
 
         # Append dynamic RAG context (example answers for probing gaps)
         rag_block = await self._enrich_followup_with_rag(candidate_response)

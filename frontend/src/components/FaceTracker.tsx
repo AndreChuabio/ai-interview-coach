@@ -1,13 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   initFaceLandmarker,
   processFrame,
   destroyFaceLandmarker,
+  calibrateBaseline,
+  hasBaseline,
   type FaceFrame,
 } from "@/lib/mediapipe";
-import { Eye, EyeOff, Smile, Frown, Meh } from "lucide-react";
+import { Eye, EyeOff, Smile, Frown, Meh, Crosshair } from "lucide-react";
 
 interface Props {
   /** Whether tracking is active. */
@@ -25,6 +27,7 @@ const EMOTION_ICONS: Record<string, React.ReactNode> = {
   confused: <Frown className="w-4 h-4 text-red-400" />,
   surprised: <Meh className="w-4 h-4 text-purple-500" />,
   neutral: <Meh className="w-4 h-4 text-gray-400" />,
+  focused: <Crosshair className="w-4 h-4 text-cyan-500" />,
 };
 
 export default function FaceTracker({
@@ -38,6 +41,10 @@ export default function FaceTracker({
   const animFrameRef = useRef<number>(0);
 
   const [initialized, setInitialized] = useState(false);
+  const [calibrated, setCalibrated] = useState(false);
+  const [calibrationStatus, setCalibrationStatus] = useState<
+    "idle" | "running" | "done"
+  >("idle");
   const [currentFrame, setCurrentFrame] = useState<FaceFrame | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -65,7 +72,21 @@ export default function FaceTracker({
 
         // Initialize MediaPipe
         await initFaceLandmarker();
-        if (!cancelled) setInitialized(true);
+        if (cancelled) return;
+        setInitialized(true);
+
+        // Run resting-face calibration automatically
+        if (videoRef.current && !hasBaseline()) {
+          setCalibrationStatus("running");
+          await calibrateBaseline(videoRef.current, 30);
+          if (!cancelled) {
+            setCalibrated(true);
+            setCalibrationStatus("done");
+          }
+        } else {
+          setCalibrated(true);
+          setCalibrationStatus("done");
+        }
       } catch (err) {
         if (!cancelled) {
           setError("Webcam or MediaPipe initialization failed");
@@ -86,9 +107,9 @@ export default function FaceTracker({
     };
   }, [active]);
 
-  // Run face detection loop
+  // Run face detection loop after calibration completes
   useEffect(() => {
-    if (!active || !initialized) return;
+    if (!active || !initialized || !calibrated) return;
 
     let lastBatchTime = Date.now();
 
@@ -125,7 +146,7 @@ export default function FaceTracker({
         frameBufferRef.current = [];
       }
     };
-  }, [active, initialized, onFrameBatch]);
+  }, [active, initialized, calibrated, onFrameBatch]);
 
   // Cleanup MediaPipe on unmount
   useEffect(() => {
@@ -152,6 +173,16 @@ export default function FaceTracker({
           {!initialized && (
             <div className="absolute inset-0 flex items-center justify-center bg-black/60 text-white text-xs">
               Initializing face tracking...
+            </div>
+          )}
+          {initialized && calibrationStatus === "running" && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/60 text-white text-xs text-center px-3">
+              <div>
+                <div className="font-medium mb-1">Calibrating</div>
+                <div className="text-gray-300">
+                  Look at the camera with a relaxed expression...
+                </div>
+              </div>
             </div>
           )}
           {error && (

@@ -46,6 +46,11 @@ export interface ToneSnapshot {
   filler_words: string[];
   avg_pitch_hz: number;
   pitch_variation: number;
+  pitch_range_hz: number;
+  rising_intonation_ratio: number;
+  monotone_flag: boolean;
+  jitter: number;
+  shimmer: number;
   energy_level: number;
   silence_ratio: number;
   duration_sec: number;
