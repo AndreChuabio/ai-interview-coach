@@ -214,12 +214,15 @@ export function processFrame(
     shapeMap[shape.categoryName] = shape.score;
   }
 
-  // Subtract resting-face baseline when available so that per-user
-  // variation in neutral expression does not skew classifications.
+  // Apply resting-face baseline correction when available.
+  // Use a soft subtraction: only remove 60% of the baseline to avoid
+  // zeroing out small but meaningful signals. Blendshapes that are
+  // below their resting baseline are clamped to 0.
+  const BASELINE_STRENGTH = 0.6;
   const adjusted: Record<string, number> = {};
   for (const [name, value] of Object.entries(shapeMap)) {
     const base = baselineShapes ? (baselineShapes[name] || 0) : 0;
-    adjusted[name] = Math.max(0, value - base);
+    adjusted[name] = Math.max(0, value - base * BASELINE_STRENGTH);
   }
 
   // Estimate head pose from transformation matrix

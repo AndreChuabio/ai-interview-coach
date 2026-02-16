@@ -139,9 +139,9 @@ async def respond(
         )
     logger.info("STT result: %s", candidate_text[:120])
 
-    # Tone analysis
+    # Tone analysis (pass transcript for WPM and filler word detection)
     tone_analyzer = ToneAnalyzer()
-    tone_snapshot = tone_analyzer.analyze(audio_bytes)
+    tone_snapshot = tone_analyzer.analyze(audio_bytes, transcript=candidate_text)
     session.tone_data.append(tone_snapshot)
 
     # Record candidate turn
