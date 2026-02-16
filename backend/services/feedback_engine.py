@@ -262,6 +262,39 @@ class FeedbackEngine:
         elif avg_energy < 0.3:
             improvements.append("Voice energy was low. Speak with more projection and enthusiasm.")
 
+        # Temporal trend analysis: compare first half vs second half
+        if len(tone_data) >= 2:
+            mid = len(tone_data) // 2
+            first_half = tone_data[:mid]
+            second_half = tone_data[mid:]
+
+            first_energy = sum(t.energy_level for t in first_half) / len(first_half)
+            second_energy = sum(t.energy_level for t in second_half) / len(second_half)
+            energy_diff = second_energy - first_energy
+
+            first_fillers = sum(t.filler_word_count for t in first_half)
+            second_fillers = sum(t.filler_word_count for t in second_half)
+
+            if energy_diff > 0.08:
+                strengths.append(
+                    "Your confidence and energy grew over the course of the interview"
+                )
+            elif energy_diff < -0.08:
+                improvements.append(
+                    "Your energy dropped toward the end of the interview. "
+                    "Practice maintaining engagement throughout longer sessions."
+                )
+
+            if second_fillers > first_fillers * 1.5 and first_fillers > 0:
+                improvements.append(
+                    "Filler word usage increased in the second half, suggesting fatigue. "
+                    "Practice sustaining clarity under pressure."
+                )
+            elif first_fillers > second_fillers * 1.5 and second_fillers >= 0:
+                strengths.append(
+                    "You reduced filler words as the interview progressed"
+                )
+
         return CommunicationScore(
             overall_score=overall,
             pace_score=round(pace_score, 1),

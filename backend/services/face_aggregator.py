@@ -98,6 +98,45 @@ class FaceAggregator:
                 "Significant head movement detected. Try to keep your head still and centered."
             )
 
+        # Temporal trend analysis: compare first half vs second half
+        if total >= 4:
+            mid = total // 2
+            first_half = snapshots[:mid]
+            second_half = snapshots[mid:]
+
+            first_eye = sum(1 for s in first_half if s.eye_contact) / len(first_half) * 100
+            second_eye = sum(1 for s in second_half if s.eye_contact) / len(second_half) * 100
+            eye_diff = second_eye - first_eye
+
+            if eye_diff > 10:
+                strengths.append(
+                    "Eye contact improved over the course of the interview"
+                )
+            elif eye_diff < -10:
+                improvements.append(
+                    "Eye contact decreased toward the end. "
+                    "Practice maintaining camera focus throughout longer sessions."
+                )
+
+            # Fidgeting trend
+            first_pitches = [s.head_pitch for s in first_half]
+            second_pitches = [s.head_pitch for s in second_half]
+            first_yaws = [s.head_yaw for s in first_half]
+            second_yaws = [s.head_yaw for s in second_half]
+
+            first_fidget = (float(np.std(first_pitches)) + float(np.std(first_yaws))) * 50
+            second_fidget = (float(np.std(second_pitches)) + float(np.std(second_yaws))) * 50
+
+            if second_fidget > first_fidget * 1.5 and first_fidget > 1:
+                improvements.append(
+                    "Head movement increased in the second half, suggesting restlessness. "
+                    "Practice staying composed during longer interviews."
+                )
+            elif first_fidget > second_fidget * 1.5 and second_fidget >= 0:
+                strengths.append(
+                    "You became noticeably calmer and more composed as the interview progressed"
+                )
+
         return BodyLanguageScore(
             overall_score=overall,
             eye_contact_pct=round(eye_contact_pct, 1),
