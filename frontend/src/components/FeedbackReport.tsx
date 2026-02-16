@@ -211,12 +211,14 @@ export default function FeedbackReport({ report, onRestart }: Props) {
     report.body_language.emotion_distribution
   ).map(([name, value]) => ({ name, value }));
 
+  // Use raw hex values (not CSS variables) so alpha suffixes can be
+  // appended directly in inline style template literals.
   const overallColor =
     report.overall_score >= 7
-      ? "var(--duo-green)"
+      ? "#58CC02"
       : report.overall_score >= 5
-        ? "var(--duo-orange)"
-        : "var(--duo-red)";
+        ? "#FF9600"
+        : "#FF4B4B";
 
   const headline =
     report.overall_score >= 8
