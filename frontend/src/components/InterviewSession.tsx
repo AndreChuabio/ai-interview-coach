@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Mic,
   Square,
@@ -39,9 +40,9 @@ interface Turn {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Progress Bar                                                       */
+/*  Progress Path (Duolingo-style connected dots)                       */
 /* ------------------------------------------------------------------ */
-function ProgressBar({
+function ProgressPath({
   current,
   total,
 }: {
@@ -49,22 +50,44 @@ function ProgressBar({
   total: number;
 }) {
   return (
-    <div className="flex items-center gap-1.5 w-full">
+    <div className="flex items-center gap-0 w-full">
       {Array.from({ length: total }, (_, i) => {
         const idx = i + 1;
         const done = idx < current;
         const active = idx === current;
         return (
-          <div
-            key={i}
-            className={`h-1.5 flex-1 rounded-full transition-all duration-500 ${
-              done
-                ? "bg-blue-500"
-                : active
-                  ? "bg-blue-400 animate-pulse"
-                  : "bg-gray-200 dark:bg-gray-700"
-            }`}
-          />
+          <div key={i} className="flex items-center flex-1">
+            <div
+              className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-extrabold transition-all duration-500 ${
+                active ? "dot-pulse" : ""
+              }`}
+              style={{
+                background: done
+                  ? "var(--duo-green)"
+                  : active
+                    ? "var(--duo-blue)"
+                    : "var(--duo-polar)",
+                color: done || active ? "white" : "var(--duo-hare)",
+                boxShadow: active ? "0 0 0 4px var(--duo-blue-light)" : "none",
+              }}
+            >
+              {done ? (
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              ) : (
+                idx
+              )}
+            </div>
+            {i < total - 1 && (
+              <div
+                className="h-1 flex-1 rounded-full transition-all duration-500"
+                style={{
+                  background: done ? "var(--duo-green)" : "var(--duo-polar)",
+                }}
+              />
+            )}
+          </div>
         );
       })}
     </div>
@@ -72,16 +95,17 @@ function ProgressBar({
 }
 
 /* ------------------------------------------------------------------ */
-/*  Audio Level Bars (CSS animation during recording)                   */
+/*  Audio Level Bars (green, Duolingo-style)                            */
 /* ------------------------------------------------------------------ */
 function AudioLevelBars() {
   return (
-    <div className="flex items-end gap-0.5 h-5">
+    <div className="flex items-end gap-1 h-6">
       {[1, 2, 3, 4, 5].map((i) => (
         <div
           key={i}
-          className="w-1 bg-red-400 rounded-full"
+          className="w-1.5 rounded-full"
           style={{
+            background: "var(--duo-green)",
             animation: `audioBar 0.8s ease-in-out ${i * 0.1}s infinite alternate`,
           }}
         />
@@ -91,23 +115,27 @@ function AudioLevelBars() {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Phase Indicator                                                     */
+/*  Phase Indicator (colored badges)                                    */
 /* ------------------------------------------------------------------ */
 function PhaseIndicator({ phase }: { phase: Phase }) {
-  const colors: Record<Phase, string> = {
-    loading: "bg-gray-400",
-    ai_speaking: "bg-yellow-400",
-    listening: "bg-green-400 animate-pulse",
-    processing: "bg-blue-400 animate-pulse",
-    done: "bg-green-500",
-    error: "bg-red-500",
+  const config: Record<Phase, { bg: string; color: string; label: string }> = {
+    loading: { bg: "var(--duo-polar)", color: "var(--duo-wolf)", label: "Loading..." },
+    ai_speaking: { bg: "var(--duo-orange-light)", color: "var(--duo-orange-push)", label: "AI speaking" },
+    listening: { bg: "var(--duo-green-light)", color: "var(--duo-green-push)", label: "Your turn" },
+    processing: { bg: "var(--duo-blue-light)", color: "var(--duo-blue-push)", label: "Processing..." },
+    done: { bg: "var(--duo-green-light)", color: "var(--duo-green-push)", label: "Complete" },
+    error: { bg: "var(--duo-red-light)", color: "var(--duo-red-push)", label: "Error" },
   };
 
+  const c = config[phase];
+
   return (
-    <div className="flex items-center gap-2 text-xs text-gray-500">
-      <span className={`w-2 h-2 rounded-full ${colors[phase]}`} />
-      {phase === "listening" ? "Your turn" : phase.replace("_", " ")}
-    </div>
+    <span
+      className="px-3 py-1 rounded-full text-xs font-bold"
+      style={{ background: c.bg, color: c.color }}
+    >
+      {c.label}
+    </span>
   );
 }
 
@@ -124,19 +152,16 @@ export default function InterviewSession({ session, onComplete }: Props) {
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Accumulated face data to send on interview completion
   const faceSnapshotsRef = useRef<FaceSnapshot[]>([]);
   const lastAudioBlobRef = useRef<Blob | null>(null);
   const recorderRef = useRef<AudioRecorder | null>(null);
   const transcriptEndRef = useRef<HTMLDivElement>(null);
   const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Auto-scroll transcript
   useEffect(() => {
     transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [transcript]);
 
-  // Initialize and play opening question
   useEffect(() => {
     let cancelled = false;
 
@@ -166,7 +191,6 @@ export default function InterviewSession({ session, onComplete }: Props) {
     };
   }, [session.session_id]);
 
-  // Handle face frame batches from FaceTracker
   const handleFaceFrameBatch = useCallback((frames: FaceFrame[]) => {
     const snapshots: FaceSnapshot[] = frames.map((f) => ({
       timestamp: f.timestamp,
@@ -179,7 +203,6 @@ export default function InterviewSession({ session, onComplete }: Props) {
     faceSnapshotsRef.current.push(...snapshots);
   }, []);
 
-  // Start recording
   const startRecording = useCallback(() => {
     if (recorderRef.current && !recorderRef.current.isRecording) {
       recorderRef.current.start();
@@ -191,7 +214,6 @@ export default function InterviewSession({ session, onComplete }: Props) {
     }
   }, []);
 
-  // Process an audio blob (shared by stopRecording and retryLastResponse)
   const processAudioBlob = useCallback(async (audioBlob: Blob) => {
     setPhase("processing");
     setErrorMessage(null);
@@ -206,7 +228,6 @@ export default function InterviewSession({ session, onComplete }: Props) {
         setLatestTone(result.tone_snapshot);
       }
 
-      // Add candidate turn
       setTranscript((prev) => [
         ...prev,
         {
@@ -216,7 +237,6 @@ export default function InterviewSession({ session, onComplete }: Props) {
         },
       ]);
 
-      // Add interviewer turn
       setTranscript((prev) => [
         ...prev,
         { role: "interviewer", text: result.interviewer_text },
@@ -227,7 +247,6 @@ export default function InterviewSession({ session, onComplete }: Props) {
 
       if (result.is_final) {
         setPhase("done");
-        // Submit accumulated face data
         if (faceSnapshotsRef.current.length > 0) {
           await submitFaceData(session.session_id, faceSnapshotsRef.current);
         }
@@ -235,7 +254,6 @@ export default function InterviewSession({ session, onComplete }: Props) {
         return;
       }
 
-      // Play interviewer audio
       setPhase("ai_speaking");
       try {
         await playAudioUrl(result.interviewer_audio_url);
@@ -252,7 +270,6 @@ export default function InterviewSession({ session, onComplete }: Props) {
     }
   }, [session.session_id, onComplete]);
 
-  // Stop recording and send to backend
   const stopRecording = useCallback(async () => {
     if (!recorderRef.current?.isRecording) return;
     setIsRecording(false);
@@ -267,13 +284,11 @@ export default function InterviewSession({ session, onComplete }: Props) {
     await processAudioBlob(audioBlob);
   }, [processAudioBlob]);
 
-  // Retry the last failed response without re-recording
   const retryLastResponse = useCallback(async () => {
     if (!lastAudioBlobRef.current) return;
     await processAudioBlob(lastAudioBlobRef.current);
   }, [processAudioBlob]);
 
-  // Cleanup
   useEffect(() => {
     return () => {
       recorderRef.current?.destroy();
@@ -289,26 +304,27 @@ export default function InterviewSession({ session, onComplete }: Props) {
   return (
     <div className="max-w-5xl mx-auto flex flex-col h-[calc(100vh-8rem)]">
       {/* Header */}
-      <div className="pb-4 border-b border-gray-200 dark:border-gray-700 space-y-3">
+      <div className="pb-4 space-y-3" style={{ borderBottom: "2px solid var(--duo-polar)" }}>
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white capitalize">
+            <h2 className="text-lg font-extrabold capitalize" style={{ color: "var(--duo-eel)" }}>
               {session.interview_type.replace("_", " ")} Interview
             </h2>
-            <p className="text-sm text-gray-500">
+            <p className="text-sm font-semibold" style={{ color: "var(--duo-wolf)" }}>
               {session.role}
               {session.company ? ` at ${session.company}` : ""}
             </p>
           </div>
           <div className="flex items-center gap-2">
             <PhaseIndicator phase={phase} />
-            <button
+            <motion.button
+              whileTap={{ scale: 0.92 }}
               onClick={() => setFaceTrackingOn(!faceTrackingOn)}
-              className={`p-2 rounded-lg transition-colors ${
-                faceTrackingOn
-                  ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300"
-                  : "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400"
-              }`}
+              className="p-2 rounded-xl transition-colors"
+              style={{
+                background: faceTrackingOn ? "var(--duo-green-light)" : "#f0f0f0",
+                color: faceTrackingOn ? "var(--duo-green-push)" : "var(--duo-hare)",
+              }}
               title={faceTrackingOn ? "Disable face tracking" : "Enable face tracking"}
             >
               {faceTrackingOn ? (
@@ -316,68 +332,127 @@ export default function InterviewSession({ session, onComplete }: Props) {
               ) : (
                 <VideoOff className="w-5 h-5" />
               )}
-            </button>
+            </motion.button>
           </div>
         </div>
 
-        {/* Progress bar */}
+        {/* Progress path */}
         <div className="flex items-center gap-3">
-          <ProgressBar current={questionNum} total={session.num_questions} />
-          <span className="text-xs text-gray-400 whitespace-nowrap">
-            {questionNum}/{session.num_questions}
+          <ProgressPath current={questionNum} total={session.num_questions} />
+          <span
+            className="text-xs font-extrabold whitespace-nowrap px-2 py-1 rounded-lg"
+            style={{ background: "var(--duo-blue-light)", color: "var(--duo-blue-push)" }}
+          >
+            Q{questionNum}/{session.num_questions}
           </span>
         </div>
       </div>
 
       {/* Main content area */}
       <div className="flex-1 flex gap-4 min-h-0 mt-4">
-        {/* Transcript column -- expands to full width when sidebar hidden */}
+        {/* Transcript column */}
         <div
-          className={`overflow-y-auto pr-2 space-y-4 transition-all duration-300 ${
+          className={`overflow-y-auto pr-2 space-y-3 transition-all duration-300 ${
             showSidebar ? "flex-1" : "w-full"
           }`}
         >
-          {transcript.map((turn, i) => (
-            <div
-              key={i}
-              className={`flex ${
-                turn.role === "candidate" ? "justify-end" : "justify-start"
-              }`}
-            >
-              <div
-                className={`max-w-[80%] rounded-2xl px-4 py-3 ${
-                  turn.role === "candidate"
-                    ? "bg-blue-600 text-white rounded-br-md"
-                    : "bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white rounded-bl-md"
+          <AnimatePresence>
+            {transcript.map((turn, i) => (
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.25 }}
+                className={`flex ${
+                  turn.role === "candidate" ? "justify-end" : "justify-start"
                 }`}
               >
-                <div className="text-xs font-medium mb-1 opacity-70">
-                  {turn.role === "interviewer" ? "Interviewer" : "You"}
-                </div>
-                <p className="text-sm leading-relaxed">{turn.text}</p>
-                {turn.tone && (
-                  <div className="mt-2 pt-2 border-t border-white/20 text-xs opacity-70 flex gap-3">
-                    <span>{turn.tone.speaking_pace_wpm.toFixed(0)} WPM</span>
-                    {turn.tone.filler_word_count > 0 && (
-                      <span>{turn.tone.filler_word_count} fillers</span>
+                <div className="flex items-start gap-2 max-w-[80%]">
+                  {turn.role === "interviewer" && (
+                    <div
+                      className="w-8 h-8 rounded-xl flex-shrink-0 flex items-center justify-center mt-1"
+                      style={{ background: "var(--duo-blue-light)" }}
+                    >
+                      <MessageSquare className="w-4 h-4" style={{ color: "var(--duo-blue)" }} />
+                    </div>
+                  )}
+                  <div
+                    className="rounded-2xl px-4 py-3"
+                    style={
+                      turn.role === "candidate"
+                        ? {
+                            background: "var(--duo-green)",
+                            color: "white",
+                            borderBottomRightRadius: "6px",
+                          }
+                        : {
+                            background: "white",
+                            color: "var(--duo-eel)",
+                            border: "2px solid var(--duo-polar)",
+                            borderBottomLeftRadius: "6px",
+                          }
+                    }
+                  >
+                    <div
+                      className="text-xs font-bold mb-1"
+                      style={{
+                        opacity: 0.7,
+                        color: turn.role === "candidate" ? "rgba(255,255,255,0.8)" : "var(--duo-wolf)",
+                      }}
+                    >
+                      {turn.role === "interviewer" ? "Interviewer" : "You"}
+                    </div>
+                    <p className="text-sm leading-relaxed font-medium">{turn.text}</p>
+                    {turn.tone && (
+                      <div
+                        className="mt-2 pt-2 text-xs font-semibold flex gap-3"
+                        style={{
+                          borderTop: "1px solid rgba(255,255,255,0.25)",
+                          opacity: 0.8,
+                        }}
+                      >
+                        <span>{turn.tone.speaking_pace_wpm.toFixed(0)} WPM</span>
+                        {turn.tone.filler_word_count > 0 && (
+                          <span>{turn.tone.filler_word_count} fillers</span>
+                        )}
+                        <span>Energy: {(turn.tone.energy_level * 100).toFixed(0)}%</span>
+                      </div>
                     )}
-                    <span>Energy: {(turn.tone.energy_level * 100).toFixed(0)}%</span>
                   </div>
-                )}
-              </div>
-            </div>
-          ))}
+                  {turn.role === "candidate" && (
+                    <div
+                      className="w-8 h-8 rounded-xl flex-shrink-0 flex items-center justify-center mt-1"
+                      style={{ background: "var(--duo-green-light)" }}
+                    >
+                      <Mic className="w-4 h-4" style={{ color: "var(--duo-green-push)" }} />
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            ))}
+          </AnimatePresence>
 
           {phase === "processing" && (
             <div className="flex justify-center py-4">
-              <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
+              <div className="flex gap-2">
+                <span className="bounce-dot" style={{ background: "var(--duo-blue)", width: "8px", height: "8px" }} />
+                <span className="bounce-dot" style={{ background: "var(--duo-blue)", width: "8px", height: "8px" }} />
+                <span className="bounce-dot" style={{ background: "var(--duo-blue)", width: "8px", height: "8px" }} />
+              </div>
             </div>
           )}
 
-          {/* Inline tip banner when sidebar is hidden and no tone data yet */}
+          {/* Tip banner */}
           {!showSidebar && transcript.length > 0 && (
-            <div className="flex items-center gap-3 px-4 py-2.5 rounded-lg bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 text-xs text-blue-600 dark:text-blue-400">
-              <span className="font-medium">Tip:</span>
+            <div
+              className="flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-semibold"
+              style={{
+                background: "var(--duo-blue-light)",
+                color: "var(--duo-blue-push)",
+                border: "2px solid var(--duo-blue)",
+              }}
+            >
+              <span className="font-extrabold">Tip:</span>
               Speak at 130-160 WPM. Use pauses instead of fillers. Structure answers with STAR method.
             </div>
           )}
@@ -385,20 +460,27 @@ export default function InterviewSession({ session, onComplete }: Props) {
           <div ref={transcriptEndRef} />
         </div>
 
-        {/* Right sidebar: face tracker + tone metrics -- only when needed */}
+        {/* Right sidebar: face tracker + tone metrics */}
         {showSidebar && (
           <div className="w-72 flex-shrink-0 space-y-3 transition-all duration-300">
-            {/* Face Tracker */}
             <FaceTracker
               active={faceTrackingOn}
               onFrameBatch={handleFaceFrameBatch}
               showPreview={true}
             />
 
-            {/* Real-time Tone Metrics */}
             {latestTone && (
-              <div className="bg-white dark:bg-gray-800 rounded-xl p-3 border border-gray-200 dark:border-gray-700 space-y-3">
-                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
+              <div
+                className="rounded-2xl p-4 space-y-3"
+                style={{
+                  background: "white",
+                  border: "2px solid var(--duo-polar)",
+                }}
+              >
+                <h3
+                  className="text-xs font-bold uppercase tracking-wide flex items-center gap-1.5"
+                  style={{ color: "var(--duo-wolf)" }}
+                >
                   <Activity className="w-3.5 h-3.5" />
                   Last Response Metrics
                 </h3>
@@ -406,32 +488,36 @@ export default function InterviewSession({ session, onComplete }: Props) {
                 {/* Speaking Pace */}
                 <div>
                   <div className="flex justify-between text-xs mb-1">
-                    <span className="text-gray-500 flex items-center gap-1">
+                    <span className="flex items-center gap-1 font-semibold" style={{ color: "var(--duo-wolf)" }}>
                       <Gauge className="w-3 h-3" /> Pace
                     </span>
-                    <span className={`font-medium ${
-                      latestTone.speaking_pace_wpm >= 130 && latestTone.speaking_pace_wpm <= 160
-                        ? "text-green-600"
-                        : latestTone.speaking_pace_wpm > 0
-                          ? "text-amber-600"
-                          : "text-gray-400"
-                    }`}>
+                    <span
+                      className="font-bold"
+                      style={{
+                        color:
+                          latestTone.speaking_pace_wpm >= 130 && latestTone.speaking_pace_wpm <= 160
+                            ? "var(--duo-green)"
+                            : latestTone.speaking_pace_wpm > 0
+                              ? "var(--duo-orange)"
+                              : "var(--duo-hare)",
+                      }}
+                    >
                       {latestTone.speaking_pace_wpm.toFixed(0)} WPM
                     </span>
                   </div>
-                  <div className="w-full h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                  <div className="w-full h-2 rounded-full overflow-hidden" style={{ background: "var(--duo-polar)" }}>
                     <div
-                      className={`h-full rounded-full transition-all ${
-                        latestTone.speaking_pace_wpm >= 130 && latestTone.speaking_pace_wpm <= 160
-                          ? "bg-green-500"
-                          : "bg-amber-500"
-                      }`}
+                      className="h-full rounded-full transition-all"
                       style={{
+                        background:
+                          latestTone.speaking_pace_wpm >= 130 && latestTone.speaking_pace_wpm <= 160
+                            ? "var(--duo-green)"
+                            : "var(--duo-orange)",
                         width: `${Math.min(100, (latestTone.speaking_pace_wpm / 200) * 100)}%`,
                       }}
                     />
                   </div>
-                  <div className="flex justify-between text-[10px] text-gray-400 mt-0.5">
+                  <div className="flex justify-between text-[10px] font-medium mt-0.5" style={{ color: "var(--duo-hare)" }}>
                     <span>Slow</span>
                     <span>130-160 ideal</span>
                     <span>Fast</span>
@@ -441,30 +527,35 @@ export default function InterviewSession({ session, onComplete }: Props) {
                 {/* Energy Level */}
                 <div>
                   <div className="flex justify-between text-xs mb-1">
-                    <span className="text-gray-500">Energy</span>
-                    <span className="font-medium text-gray-700 dark:text-gray-300">
+                    <span className="font-semibold" style={{ color: "var(--duo-wolf)" }}>Energy</span>
+                    <span className="font-bold" style={{ color: "var(--duo-eel)" }}>
                       {(latestTone.energy_level * 100).toFixed(0)}%
                     </span>
                   </div>
-                  <div className="w-full h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                  <div className="w-full h-2 rounded-full overflow-hidden" style={{ background: "var(--duo-polar)" }}>
                     <div
-                      className="h-full bg-blue-500 rounded-full transition-all"
-                      style={{ width: `${latestTone.energy_level * 100}%` }}
+                      className="h-full rounded-full transition-all"
+                      style={{
+                        background: "var(--duo-blue)",
+                        width: `${latestTone.energy_level * 100}%`,
+                      }}
                     />
                   </div>
                 </div>
 
                 {/* Fillers */}
                 <div className="flex justify-between text-xs">
-                  <span className="text-gray-500">Filler Words</span>
+                  <span className="font-semibold" style={{ color: "var(--duo-wolf)" }}>Filler Words</span>
                   <span
-                    className={`font-medium ${
-                      latestTone.filler_word_count === 0
-                        ? "text-green-600"
-                        : latestTone.filler_word_count <= 3
-                          ? "text-amber-600"
-                          : "text-red-600"
-                    }`}
+                    className="font-bold"
+                    style={{
+                      color:
+                        latestTone.filler_word_count === 0
+                          ? "var(--duo-green)"
+                          : latestTone.filler_word_count <= 3
+                            ? "var(--duo-orange)"
+                            : "var(--duo-red)",
+                    }}
                   >
                     {latestTone.filler_word_count}
                     {latestTone.filler_word_count === 0 && " (clean)"}
@@ -473,8 +564,8 @@ export default function InterviewSession({ session, onComplete }: Props) {
 
                 {/* Silence Ratio */}
                 <div className="flex justify-between text-xs">
-                  <span className="text-gray-500">Silence</span>
-                  <span className="font-medium text-gray-700 dark:text-gray-300">
+                  <span className="font-semibold" style={{ color: "var(--duo-wolf)" }}>Silence</span>
+                  <span className="font-bold" style={{ color: "var(--duo-eel)" }}>
                     {(latestTone.silence_ratio * 100).toFixed(0)}%
                   </span>
                 </div>
@@ -485,57 +576,74 @@ export default function InterviewSession({ session, onComplete }: Props) {
       </div>
 
       {/* Controls */}
-      <div className="pt-4 border-t border-gray-200 dark:border-gray-700 mt-4">
-        <div className="flex flex-col items-center gap-2">
+      <div className="pt-4 mt-4" style={{ borderTop: "2px solid var(--duo-polar)" }}>
+        <div className="flex flex-col items-center gap-3">
           {phase === "listening" && (
             <>
               {isRecording ? (
-                <div className="flex flex-col items-center gap-2">
-                  {/* Timer -- prominent */}
-                  <span className="text-2xl font-mono font-semibold text-red-500 tabular-nums">
+                <div className="flex flex-col items-center gap-3">
+                  <span
+                    className="text-3xl font-mono font-extrabold tabular-nums"
+                    style={{ color: "var(--duo-red)" }}
+                  >
                     {formatTime(recordingDuration)}
                   </span>
                   <AudioLevelBars />
-                  <button
+                  <motion.button
+                    whileTap={{ scale: 0.95 }}
                     onClick={stopRecording}
-                    className="relative flex items-center gap-2 px-8 py-3 rounded-full bg-red-600 hover:bg-red-700 text-white font-medium transition-colors"
+                    className="btn-3d btn-3d-red relative flex items-center gap-2 px-8 py-3 rounded-full text-base"
                   >
-                    {/* Pulsing ring */}
-                    <span className="absolute inset-0 rounded-full border-2 border-red-400 animate-ping opacity-40" />
+                    <span
+                      className="absolute inset-0 rounded-full opacity-40"
+                      style={{
+                        border: "2px solid var(--duo-red)",
+                        animation: "pulseGlow 2s infinite",
+                      }}
+                    />
                     <Square className="w-5 h-5 relative" />
                     <span className="relative">Stop Recording</span>
-                  </button>
+                  </motion.button>
                 </div>
               ) : (
-                <button
+                <motion.button
+                  whileTap={{ scale: 0.95 }}
+                  whileHover={{ scale: 1.03 }}
                   onClick={startRecording}
-                  className="relative flex items-center gap-2 px-8 py-3 rounded-full bg-blue-600 hover:bg-blue-700 text-white font-medium transition-all shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40"
+                  className="btn-3d btn-3d-green relative flex items-center gap-2 px-8 py-3 rounded-full text-base pulse-glow-green"
                 >
-                  {/* Gentle pulse ring */}
-                  <span className="absolute inset-0 rounded-full border-2 border-blue-400 animate-pulse opacity-30" />
                   <Mic className="w-5 h-5 relative" />
                   <span className="relative">Start Speaking</span>
-                </button>
+                </motion.button>
               )}
             </>
           )}
 
           {phase === "ai_speaking" && (
-            <div className="flex items-center gap-2 px-6 py-3 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300">
+            <div
+              className="flex items-center gap-2 px-6 py-3 rounded-full font-bold text-sm"
+              style={{ background: "var(--duo-orange-light)", color: "var(--duo-orange-push)" }}
+            >
               <MessageSquare className="w-5 h-5" />
               Interviewer is speaking...
             </div>
           )}
 
           {phase === "processing" && (
-            <div className="flex items-center gap-2 px-6 py-3 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300">
+            <div
+              className="flex items-center gap-2 px-6 py-3 rounded-full font-bold text-sm"
+              style={{ background: "var(--duo-blue-light)", color: "var(--duo-blue-push)" }}
+            >
               <Loader2 className="w-5 h-5 animate-spin" />
               Processing your response...
             </div>
           )}
 
           {phase === "loading" && (
-            <div className="flex items-center gap-2 px-6 py-3 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300">
+            <div
+              className="flex items-center gap-2 px-6 py-3 rounded-full font-bold text-sm"
+              style={{ background: "#f0f0f0", color: "var(--duo-wolf)" }}
+            >
               <Loader2 className="w-5 h-5 animate-spin" />
               Preparing interview...
             </div>
@@ -543,33 +651,45 @@ export default function InterviewSession({ session, onComplete }: Props) {
 
           {phase === "error" && (
             <div className="flex flex-col items-center gap-3">
-              <div className="px-6 py-3 rounded-lg bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 text-sm text-red-700 dark:text-red-300 max-w-md text-center">
+              <div
+                className="px-6 py-3 rounded-2xl text-sm font-semibold max-w-md text-center"
+                style={{
+                  background: "var(--duo-red-light)",
+                  color: "var(--duo-red-push)",
+                  border: "2px solid var(--duo-red)",
+                }}
+              >
                 {errorMessage || "Something went wrong processing your response."}
               </div>
               <div className="flex items-center gap-3">
-                <button
+                <motion.button
+                  whileTap={{ scale: 0.95 }}
                   onClick={retryLastResponse}
-                  className="flex items-center gap-2 px-6 py-2.5 rounded-full bg-red-600 hover:bg-red-700 text-white font-medium transition-colors"
+                  className="btn-3d btn-3d-red flex items-center gap-2 px-6 py-2.5 rounded-full text-sm"
                 >
                   <RefreshCw className="w-4 h-4" />
                   Try Again
-                </button>
-                <button
+                </motion.button>
+                <motion.button
+                  whileTap={{ scale: 0.95 }}
                   onClick={() => {
                     setErrorMessage(null);
                     lastAudioBlobRef.current = null;
                     setPhase("listening");
                   }}
-                  className="px-6 py-2.5 rounded-full bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 font-medium transition-colors"
+                  className="btn-3d btn-3d-ghost px-6 py-2.5 rounded-full text-sm font-bold"
                 >
                   Re-record
-                </button>
+                </motion.button>
               </div>
             </div>
           )}
 
           {phase === "done" && (
-            <div className="flex items-center gap-2 px-6 py-3 rounded-full bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 font-medium">
+            <div
+              className="flex items-center gap-2 px-6 py-3 rounded-full font-bold text-sm"
+              style={{ background: "var(--duo-green-light)", color: "var(--duo-green-push)" }}
+            >
               Interview complete -- generating your feedback report...
             </div>
           )}

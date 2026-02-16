@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import InterviewSetup from "@/components/InterviewSetup";
 import InterviewSession from "@/components/InterviewSession";
 import FeedbackReportView from "@/components/FeedbackReport";
@@ -13,6 +14,13 @@ import {
 } from "@/lib/api";
 
 type AppPhase = "setup" | "interview" | "generating_report" | "report";
+
+const GENERATING_MESSAGES = [
+  "Crunching your performance data...",
+  "Analyzing tone and body language...",
+  "Building your personalized report...",
+  "Almost there...",
+];
 
 export default function Home() {
   const [phase, setPhase] = useState<AppPhase>("setup");
@@ -61,17 +69,30 @@ export default function Home() {
   };
 
   return (
-    <main className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      {/* Top nav bar */}
-      <nav className="sticky top-0 z-30 bg-white/80 dark:bg-gray-900/80 backdrop-blur border-b border-gray-200 dark:border-gray-800">
-        <div className="container mx-auto px-4 h-12 flex items-center justify-between">
-          <span className="text-sm font-semibold text-gray-900 dark:text-white tracking-tight">
-            AI Interview Coach
-          </span>
+    <main className="min-h-screen" style={{ background: "var(--background)" }}>
+      {/* Navbar */}
+      <nav className="sticky top-0 z-30 bg-white border-b-2" style={{ borderColor: "var(--duo-polar)" }}>
+        <div className="container mx-auto px-4 h-14 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div
+              className="w-8 h-8 rounded-xl flex items-center justify-center"
+              style={{ background: "var(--duo-green)" }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                <line x1="12" x2="12" y1="19" y2="22" />
+              </svg>
+            </div>
+            <span className="text-base font-extrabold" style={{ color: "var(--duo-eel)" }}>
+              AI Interview Coach
+            </span>
+          </div>
           {phase !== "setup" && (
             <button
               onClick={handleRestart}
-              className="text-xs text-gray-500 hover:text-gray-900 dark:hover:text-white transition-colors"
+              className="text-sm font-bold px-4 py-1.5 rounded-xl transition-colors"
+              style={{ color: "var(--duo-blue)" }}
             >
               New Interview
             </button>
@@ -81,50 +102,105 @@ export default function Home() {
 
       <div className="container mx-auto px-4 py-8">
         {error && (
-          <div className="max-w-2xl mx-auto mb-6 p-4 rounded-lg bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-sm">
-            {error}
+          <div
+            className="max-w-2xl mx-auto mb-6 p-4 rounded-2xl text-sm font-semibold flex items-center justify-between"
+            style={{ background: "var(--duo-red-light)", color: "var(--duo-red)", border: "2px solid var(--duo-red)" }}
+          >
+            <span>{error}</span>
             <button
               onClick={() => setError(null)}
-              className="ml-2 underline"
+              className="ml-3 font-bold underline"
             >
               Dismiss
             </button>
           </div>
         )}
 
-        {phase === "setup" && (
-          <div className="phase-fade-in">
-            <InterviewSetup onStart={handleStart} isLoading={isLoading} />
-          </div>
-        )}
+        <AnimatePresence mode="wait">
+          {phase === "setup" && (
+            <motion.div
+              key="setup"
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -16 }}
+              transition={{ duration: 0.35, ease: "easeOut" }}
+            >
+              <InterviewSetup onStart={handleStart} isLoading={isLoading} />
+            </motion.div>
+          )}
 
-        {phase === "interview" && session && (
-          <div className="phase-fade-in">
-            <InterviewSession
-              session={session}
-              onComplete={handleComplete}
-            />
-          </div>
-        )}
+          {phase === "interview" && session && (
+            <motion.div
+              key="interview"
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -16 }}
+              transition={{ duration: 0.35, ease: "easeOut" }}
+            >
+              <InterviewSession
+                session={session}
+                onComplete={handleComplete}
+              />
+            </motion.div>
+          )}
 
-        {phase === "generating_report" && (
-          <div className="phase-fade-in flex flex-col items-center justify-center py-32">
-            <div className="w-12 h-12 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mb-4" />
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-              Generating Your Feedback Report
-            </h2>
-            <p className="text-gray-500 mt-2">
-              Analyzing your responses, tone, and body language...
-            </p>
-          </div>
-        )}
+          {phase === "generating_report" && (
+            <motion.div
+              key="generating"
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -16 }}
+              transition={{ duration: 0.35, ease: "easeOut" }}
+            >
+              <GeneratingReportView />
+            </motion.div>
+          )}
 
-        {phase === "report" && report && (
-          <div className="phase-fade-in">
-            <FeedbackReportView report={report} onRestart={handleRestart} />
-          </div>
-        )}
+          {phase === "report" && report && (
+            <motion.div
+              key="report"
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -16 }}
+              transition={{ duration: 0.35, ease: "easeOut" }}
+            >
+              <FeedbackReportView report={report} onRestart={handleRestart} />
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </main>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Generating Report -- bouncy dots + cycling messages                  */
+/* ------------------------------------------------------------------ */
+function GeneratingReportView() {
+  const [msgIdx, setMsgIdx] = useState(0);
+
+  useState(() => {
+    const interval = setInterval(() => {
+      setMsgIdx((prev) => (prev + 1) % GENERATING_MESSAGES.length);
+    }, 3000);
+    return () => clearInterval(interval);
+  });
+
+  return (
+    <div className="flex flex-col items-center justify-center py-32 gap-6">
+      {/* Bouncing dots */}
+      <div className="flex gap-2">
+        <span className="bounce-dot" style={{ background: "var(--duo-green)" }} />
+        <span className="bounce-dot" style={{ background: "var(--duo-blue)" }} />
+        <span className="bounce-dot" style={{ background: "var(--duo-orange)" }} />
+      </div>
+
+      <h2 className="text-2xl font-extrabold" style={{ color: "var(--duo-eel)" }}>
+        Generating Your Report
+      </h2>
+      <p className="text-base font-semibold" style={{ color: "var(--duo-wolf)" }}>
+        {GENERATING_MESSAGES[msgIdx]}
+      </p>
+    </div>
   );
 }

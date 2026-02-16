@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { motion } from "framer-motion";
 import {
   Mic,
   Briefcase,
@@ -24,35 +25,61 @@ const INTERVIEW_TYPES = [
     label: "Behavioral",
     description: "Leadership, teamwork, conflict resolution",
     icon: Briefcase,
+    color: "var(--duo-blue)",
+    lightBg: "var(--duo-blue-light)",
+    pushColor: "var(--duo-blue-push)",
   },
   {
     id: "technical" as const,
     label: "Technical",
     description: "Data science, coding, system design",
     icon: GraduationCap,
+    color: "var(--duo-purple)",
+    lightBg: "var(--duo-purple-light)",
+    pushColor: "var(--duo-purple-push)",
   },
   {
     id: "case_study" as const,
     label: "Case Study",
     description: "Market sizing, profitability, strategy",
     icon: TrendingUp,
+    color: "var(--duo-orange)",
+    lightBg: "var(--duo-orange-light)",
+    pushColor: "var(--duo-orange-push)",
   },
 ];
 
 const DIFFICULTIES = [
-  { id: "easy" as const, label: "Easy", color: "bg-green-500" },
-  { id: "medium" as const, label: "Medium", color: "bg-yellow-500" },
-  { id: "hard" as const, label: "Hard", color: "bg-red-500" },
+  {
+    id: "easy" as const,
+    label: "Easy",
+    color: "var(--duo-green)",
+    pushColor: "var(--duo-green-push)",
+    hoverColor: "var(--duo-green-hover)",
+  },
+  {
+    id: "medium" as const,
+    label: "Medium",
+    color: "var(--duo-orange)",
+    pushColor: "var(--duo-orange-push)",
+    hoverColor: "var(--duo-orange-hover)",
+  },
+  {
+    id: "hard" as const,
+    label: "Hard",
+    color: "var(--duo-red)",
+    pushColor: "var(--duo-red-push)",
+    hoverColor: "var(--duo-red-hover)",
+  },
 ];
 
 const FEATURES = [
-  { icon: Mic, label: "Voice AI", description: "Natural conversation" },
-  { icon: Eye, label: "Face Tracking", description: "Expression analysis" },
-  { icon: AudioLines, label: "Tone Analysis", description: "Pace and fillers" },
-  { icon: Database, label: "Knowledge Graph", description: "Company context" },
+  { icon: Mic, label: "Voice AI", description: "Natural conversation", color: "var(--duo-green)", bg: "var(--duo-green-light)" },
+  { icon: Eye, label: "Face Tracking", description: "Expression analysis", color: "var(--duo-blue)", bg: "var(--duo-blue-light)" },
+  { icon: AudioLines, label: "Tone Analysis", description: "Pace and fillers", color: "var(--duo-orange)", bg: "var(--duo-orange-light)" },
+  { icon: Database, label: "Knowledge Graph", description: "Company context", color: "var(--duo-purple)", bg: "var(--duo-purple-light)" },
 ];
 
-/** Companies seeded in the Neo4j knowledge graph. */
 const SEEDED_COMPANIES = [
   "Google",
   "Amazon",
@@ -83,7 +110,6 @@ export default function InterviewSetup({ onStart, isLoading }: Props) {
   const [companyOpen, setCompanyOpen] = useState(false);
   const companyRef = useRef<HTMLDivElement>(null);
 
-  // Close dropdown when clicking outside
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       if (companyRef.current && !companyRef.current.contains(e.target as Node)) {
@@ -119,33 +145,49 @@ export default function InterviewSetup({ onStart, isLoading }: Props) {
     <div className="max-w-2xl mx-auto">
       {/* Hero */}
       <div className="text-center mb-8">
-        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 mb-4 shadow-lg shadow-blue-500/25">
-          <Mic className="w-8 h-8 text-white" />
-        </div>
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-          AI Interview Coach
+        <motion.div
+          initial={{ scale: 0.5, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ type: "spring", stiffness: 260, damping: 20 }}
+          className="inline-flex items-center justify-center w-20 h-20 rounded-2xl mb-5"
+          style={{ background: "var(--duo-green)" }}
+        >
+          <Mic className="w-10 h-10 text-white" />
+        </motion.div>
+        <h1 className="text-4xl font-extrabold mb-2" style={{ color: "var(--duo-eel)" }}>
+          Practice Makes Perfect
         </h1>
-        <p className="text-gray-600 dark:text-gray-400 max-w-md mx-auto">
-          Practice interviews with an AI that analyzes your responses, tone, and
-          facial expressions in real time.
+        <p className="text-lg font-medium max-w-md mx-auto" style={{ color: "var(--duo-wolf)" }}>
+          Ace your next interview with real-time AI feedback on your responses, tone, and body language.
         </p>
       </div>
 
-      {/* Feature highlights */}
+      {/* Feature badges */}
       <div className="grid grid-cols-4 gap-3 mb-10">
-        {FEATURES.map((f) => {
+        {FEATURES.map((f, i) => {
           const Icon = f.icon;
           return (
-            <div
+            <motion.div
               key={f.label}
-              className="flex flex-col items-center text-center p-3 rounded-xl bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700"
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.08, duration: 0.3 }}
+              className="flex flex-col items-center text-center p-3 rounded-2xl"
+              style={{ background: f.bg }}
             >
-              <Icon className="w-5 h-5 text-blue-500 mb-1.5" />
-              <span className="text-xs font-semibold text-gray-800 dark:text-gray-200">
+              <div
+                className="w-9 h-9 rounded-xl flex items-center justify-center mb-1.5"
+                style={{ background: f.color }}
+              >
+                <Icon className="w-5 h-5 text-white" />
+              </div>
+              <span className="text-xs font-bold" style={{ color: "var(--duo-eel)" }}>
                 {f.label}
               </span>
-              <span className="text-[10px] text-gray-400">{f.description}</span>
-            </div>
+              <span className="text-[10px] font-medium" style={{ color: "var(--duo-wolf)" }}>
+                {f.description}
+              </span>
+            </motion.div>
           );
         })}
       </div>
@@ -153,7 +195,7 @@ export default function InterviewSetup({ onStart, isLoading }: Props) {
       <form onSubmit={handleSubmit} className="space-y-8">
         {/* Interview Type */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+          <label className="block text-sm font-bold uppercase tracking-wide mb-3" style={{ color: "var(--duo-wolf)" }}>
             Interview Type
           </label>
           <div className="grid grid-cols-3 gap-3">
@@ -161,28 +203,42 @@ export default function InterviewSetup({ onStart, isLoading }: Props) {
               const Icon = type.icon;
               const selected = interviewType === type.id;
               return (
-                <button
+                <motion.button
                   key={type.id}
                   type="button"
                   onClick={() => setInterviewType(type.id)}
-                  className={`p-4 rounded-xl border-2 text-left transition-all duration-200 ${
+                  whileTap={{ scale: 0.97 }}
+                  className="duo-card text-left"
+                  style={
                     selected
-                      ? "border-blue-500 bg-blue-50 dark:bg-blue-950 shadow-md shadow-blue-500/10 scale-[1.02]"
-                      : "border-gray-200 dark:border-gray-700 hover:border-gray-300 hover:shadow-sm hover:scale-[1.01]"
-                  }`}
+                      ? {
+                          borderColor: type.color,
+                          background: type.lightBg,
+                          borderLeftWidth: "4px",
+                          transform: "scale(1.02)",
+                          boxShadow: "0 2px 12px rgba(0,0,0,0.08)",
+                        }
+                      : {}
+                  }
                 >
-                  <Icon
-                    className={`w-5 h-5 mb-2 ${
-                      selected ? "text-blue-600" : "text-gray-400"
-                    }`}
-                  />
-                  <div className="font-medium text-sm text-gray-900 dark:text-white">
+                  <div
+                    className="w-10 h-10 rounded-xl flex items-center justify-center mb-2"
+                    style={{
+                      background: selected ? type.color : "var(--duo-polar)",
+                    }}
+                  >
+                    <Icon
+                      className="w-5 h-5"
+                      style={{ color: selected ? "white" : "var(--duo-hare)" }}
+                    />
+                  </div>
+                  <div className="font-bold text-sm" style={{ color: "var(--duo-eel)" }}>
                     {type.label}
                   </div>
-                  <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  <div className="text-xs font-medium mt-1" style={{ color: "var(--duo-wolf)" }}>
                     {type.description}
                   </div>
-                </button>
+                </motion.button>
               );
             })}
           </div>
@@ -192,7 +248,8 @@ export default function InterviewSetup({ onStart, isLoading }: Props) {
         <div>
           <label
             htmlFor="role"
-            className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+            className="block text-sm font-bold uppercase tracking-wide mb-2"
+            style={{ color: "var(--duo-wolf)" }}
           >
             Target Role
           </label>
@@ -202,18 +259,32 @@ export default function InterviewSetup({ onStart, isLoading }: Props) {
             value={role}
             onChange={(e) => setRole(e.target.value)}
             placeholder="e.g., Data Scientist, Product Manager"
-            className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full px-4 py-3 rounded-2xl text-base font-semibold focus:outline-none transition-all"
+            style={{
+              border: "2px solid var(--duo-polar)",
+              color: "var(--duo-eel)",
+              background: "white",
+            }}
+            onFocus={(e) => {
+              e.currentTarget.style.borderColor = "var(--duo-blue)";
+              e.currentTarget.style.boxShadow = "0 0 0 3px var(--duo-blue-light)";
+            }}
+            onBlur={(e) => {
+              e.currentTarget.style.borderColor = "var(--duo-polar)";
+              e.currentTarget.style.boxShadow = "none";
+            }}
           />
         </div>
 
-        {/* Company -- Autocomplete */}
+        {/* Company Autocomplete */}
         <div ref={companyRef} className="relative">
           <label
             htmlFor="company"
-            className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+            className="block text-sm font-bold uppercase tracking-wide mb-2"
+            style={{ color: "var(--duo-wolf)" }}
           >
             Target Company{" "}
-            <span className="text-gray-400">(optional)</span>
+            <span className="normal-case font-medium" style={{ color: "var(--duo-hare)" }}>(optional)</span>
           </label>
           <div className="relative">
             <input
@@ -224,26 +295,52 @@ export default function InterviewSetup({ onStart, isLoading }: Props) {
                 setCompany(e.target.value);
                 setCompanyOpen(true);
               }}
-              onFocus={() => setCompanyOpen(true)}
+              onFocus={(e) => {
+                setCompanyOpen(true);
+                e.currentTarget.style.borderColor = "var(--duo-blue)";
+                e.currentTarget.style.boxShadow = "0 0 0 3px var(--duo-blue-light)";
+              }}
+              onBlur={(e) => {
+                e.currentTarget.style.borderColor = "var(--duo-polar)";
+                e.currentTarget.style.boxShadow = "none";
+              }}
               placeholder="e.g., Google, JP Morgan, McKinsey"
-              className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent pr-20"
+              className="w-full px-4 py-3 rounded-2xl text-base font-semibold pr-20 focus:outline-none transition-all"
+              style={{
+                border: "2px solid var(--duo-polar)",
+                color: "var(--duo-eel)",
+                background: "white",
+              }}
               autoComplete="off"
             />
             {isSeededCompany && (
-              <span className="absolute right-10 top-1/2 -translate-y-1/2 text-[10px] font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950 px-1.5 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
+              <span
+                className="absolute right-10 top-1/2 -translate-y-1/2 text-[10px] font-bold px-2 py-0.5 rounded-full"
+                style={{
+                  background: "var(--duo-green-light)",
+                  color: "var(--duo-green-push)",
+                  border: "1px solid var(--duo-green)",
+                }}
+              >
                 RAG
               </span>
             )}
             <ChevronDown
-              className={`absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 transition-transform ${
+              className={`absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 transition-transform ${
                 companyOpen ? "rotate-180" : ""
               }`}
+              style={{ color: "var(--duo-hare)" }}
             />
           </div>
 
-          {/* Dropdown */}
           {companyOpen && filteredCompanies.length > 0 && (
-            <div className="absolute z-20 w-full mt-1 max-h-48 overflow-y-auto bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg">
+            <div
+              className="absolute z-20 w-full mt-2 max-h-48 overflow-y-auto rounded-2xl shadow-lg"
+              style={{
+                background: "white",
+                border: "2px solid var(--duo-polar)",
+              }}
+            >
               {filteredCompanies.map((c) => (
                 <button
                   key={c}
@@ -252,16 +349,30 @@ export default function InterviewSetup({ onStart, isLoading }: Props) {
                     setCompany(c);
                     setCompanyOpen(false);
                   }}
-                  className="w-full text-left px-4 py-2 text-sm hover:bg-blue-50 dark:hover:bg-blue-950 flex items-center justify-between"
+                  className="w-full text-left px-4 py-2.5 text-sm font-semibold flex items-center justify-between transition-colors"
+                  style={{ color: "var(--duo-eel)" }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = "var(--duo-green-light)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = "transparent";
+                  }}
                 >
-                  <span className="text-gray-800 dark:text-gray-200">{c}</span>
-                  <span className="text-[10px] text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950 px-1.5 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
+                  <span>{c}</span>
+                  <span
+                    className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                    style={{
+                      background: "var(--duo-green-light)",
+                      color: "var(--duo-green-push)",
+                      border: "1px solid var(--duo-green)",
+                    }}
+                  >
                     RAG
                   </span>
                 </button>
               ))}
               {company.trim() && filteredCompanies.length === 0 && (
-                <div className="px-4 py-2 text-sm text-gray-400">
+                <div className="px-4 py-2.5 text-sm font-medium" style={{ color: "var(--duo-hare)" }}>
                   No matching companies -- will use general questions
                 </div>
               )}
@@ -271,28 +382,37 @@ export default function InterviewSetup({ onStart, isLoading }: Props) {
 
         {/* Difficulty */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+          <label className="block text-sm font-bold uppercase tracking-wide mb-3" style={{ color: "var(--duo-wolf)" }}>
             Difficulty
           </label>
           <div className="flex gap-3">
             {DIFFICULTIES.map((d) => {
               const selected = difficulty === d.id;
               return (
-                <button
+                <motion.button
                   key={d.id}
                   type="button"
                   onClick={() => setDifficulty(d.id)}
-                  className={`flex-1 py-3 px-4 rounded-xl border-2 font-medium text-sm transition-all duration-200 ${
+                  whileTap={{ scale: 0.96 }}
+                  className="btn-3d flex-1 py-3 px-4 text-sm"
+                  style={
                     selected
-                      ? "border-blue-500 bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 shadow-md shadow-blue-500/10"
-                      : "border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-300"
-                  }`}
+                      ? {
+                          background: d.color,
+                          borderBottomColor: d.pushColor,
+                          color: "white",
+                        }
+                      : {
+                          background: "white",
+                          borderBottomColor: "var(--duo-polar)",
+                          color: "var(--duo-eel)",
+                          border: "2px solid var(--duo-polar)",
+                          borderBottom: "4px solid var(--duo-polar)",
+                        }
+                  }
                 >
-                  <span
-                    className={`inline-block w-2.5 h-2.5 rounded-full ${d.color} mr-2`}
-                  />
                   {d.label}
-                </button>
+                </motion.button>
               );
             })}
           </div>
@@ -302,9 +422,16 @@ export default function InterviewSetup({ onStart, isLoading }: Props) {
         <div>
           <label
             htmlFor="numQuestions"
-            className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+            className="block text-sm font-bold uppercase tracking-wide mb-2"
+            style={{ color: "var(--duo-wolf)" }}
           >
-            Number of Questions: {numQuestions}
+            Number of Questions:{" "}
+            <span
+              className="inline-block px-3 py-0.5 rounded-full text-sm font-extrabold"
+              style={{ background: "var(--duo-green-light)", color: "var(--duo-green-push)" }}
+            >
+              {numQuestions}
+            </span>
           </label>
           <input
             id="numQuestions"
@@ -313,9 +440,9 @@ export default function InterviewSetup({ onStart, isLoading }: Props) {
             max={15}
             value={numQuestions}
             onChange={(e) => setNumQuestions(Number(e.target.value))}
-            className="w-full accent-blue-600"
+            className="w-full"
           />
-          <div className="flex justify-between text-xs text-gray-400 mt-1">
+          <div className="flex justify-between text-xs font-semibold mt-1" style={{ color: "var(--duo-hare)" }}>
             <span>3 (quick)</span>
             <span>15 (thorough)</span>
           </div>
@@ -325,13 +452,15 @@ export default function InterviewSetup({ onStart, isLoading }: Props) {
         {isLoading ? (
           <LoadingOverlay />
         ) : (
-          <button
+          <motion.button
             type="submit"
             disabled={!role.trim()}
-            className="w-full py-3.5 px-6 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:from-gray-400 disabled:to-gray-400 text-white font-semibold text-lg transition-all duration-200 shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40"
+            whileHover={{ scale: 1.01 }}
+            whileTap={{ scale: 0.98 }}
+            className="btn-3d btn-3d-green w-full py-4 text-lg"
           >
             Start Interview
-          </button>
+          </motion.button>
         )}
       </form>
     </div>
@@ -339,7 +468,7 @@ export default function InterviewSetup({ onStart, isLoading }: Props) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Loading overlay with cycling status messages                       */
+/* Loading overlay with cycling status messages                        */
 /* ------------------------------------------------------------------ */
 
 const LOADING_MESSAGES = [
@@ -353,7 +482,6 @@ function LoadingOverlay() {
   const [messageIdx, setMessageIdx] = useState(0);
   const [elapsed, setElapsed] = useState(0);
 
-  // Cycle status message every 3 seconds
   useEffect(() => {
     const interval = setInterval(() => {
       setMessageIdx((prev) => (prev + 1) % LOADING_MESSAGES.length);
@@ -361,7 +489,6 @@ function LoadingOverlay() {
     return () => clearInterval(interval);
   }, []);
 
-  // Elapsed timer -- tick every second
   useEffect(() => {
     const interval = setInterval(() => {
       setElapsed((prev) => prev + 1);
@@ -370,36 +497,25 @@ function LoadingOverlay() {
   }, []);
 
   return (
-    <div className="w-full py-6 px-6 rounded-xl bg-gradient-to-r from-blue-600/10 to-indigo-600/10 border-2 border-blue-500/30 flex flex-col items-center gap-4">
-      {/* Spinner */}
-      <svg
-        className="animate-spin h-8 w-8 text-blue-500"
-        xmlns="http://www.w3.org/2000/svg"
-        fill="none"
-        viewBox="0 0 24 24"
-      >
-        <circle
-          className="opacity-25"
-          cx="12"
-          cy="12"
-          r="10"
-          stroke="currentColor"
-          strokeWidth="4"
-        />
-        <path
-          className="opacity-75"
-          fill="currentColor"
-          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-        />
-      </svg>
+    <div
+      className="w-full py-8 px-6 rounded-2xl flex flex-col items-center gap-4"
+      style={{
+        background: "var(--duo-green-light)",
+        border: "2px solid var(--duo-green)",
+      }}
+    >
+      {/* Bouncing dots */}
+      <div className="flex gap-2">
+        <span className="bounce-dot" style={{ background: "var(--duo-green)" }} />
+        <span className="bounce-dot" style={{ background: "var(--duo-blue)" }} />
+        <span className="bounce-dot" style={{ background: "var(--duo-orange)" }} />
+      </div>
 
-      {/* Cycling status text */}
-      <p className="text-sm font-medium text-blue-600 dark:text-blue-400 transition-opacity duration-300">
+      <p className="text-sm font-bold" style={{ color: "var(--duo-green-push)" }}>
         {LOADING_MESSAGES[messageIdx]}
       </p>
 
-      {/* Subtle elapsed timer */}
-      <span className="text-xs text-gray-400">
+      <span className="text-xs font-semibold" style={{ color: "var(--duo-hare)" }}>
         {elapsed}s
       </span>
     </div>
