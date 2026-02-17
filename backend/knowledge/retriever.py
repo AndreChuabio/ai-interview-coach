@@ -110,6 +110,7 @@ class RAGRetriever:
         interview_type: str,
         role: str = "",
         company: str = "",
+        topic: str = "",
         query_text: str = "",
     ) -> InterviewContext:
         """
@@ -119,6 +120,7 @@ class RAGRetriever:
             interview_type: behavioral, technical, or case_study.
             role: Target job role.
             company: Target company (optional).
+            topic: Single topic for quick practice (optional).
             query_text: Optional text query for semantic search.
 
         Returns:
@@ -131,16 +133,17 @@ class RAGRetriever:
             return ctx
 
         try:
-            # 1. Graph traversal: get questions linked to company/role/type
+            # 1. Graph traversal: get questions linked to topic, company/role/type
             ctx.graph_questions = await neo4j_manager.get_questions_for_context(
                 interview_type=interview_type,
                 role=role,
                 company=company,
+                topic=topic,
                 limit=5,
             )
             logger.info(
-                "Graph retrieval: %d questions for type=%s role=%s company=%s",
-                len(ctx.graph_questions), interview_type, role, company,
+                "Graph retrieval: %d questions for type=%s role=%s company=%s topic=%s",
+                len(ctx.graph_questions), interview_type, role, company, topic or "(any)",
             )
 
             # 2. Vector similarity: find semantically similar questions.

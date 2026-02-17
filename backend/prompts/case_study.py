@@ -19,6 +19,7 @@ Guidelines:
 - Do NOT use placeholders like [Candidate name] or [Name]. Address the candidate directly with "you" or begin speaking without a greeting.
 
 Difficulty level: {difficulty}.
+{age_instruction}
 """
 
 OPENING_TEMPLATE = """Begin the case study interview. Greet the candidate briefly (one sentence),

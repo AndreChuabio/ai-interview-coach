@@ -38,6 +38,8 @@ class SessionRow(Base):
     difficulty: Mapped[str] = mapped_column(String(16), default="medium")
     num_questions: Mapped[int] = mapped_column(Integer, default=5)
     status: Mapped[str] = mapped_column(String(16), default="setup")
+    practice_mode: Mapped[str] = mapped_column(String(16), default="")
+    topic: Mapped[str] = mapped_column(String(256), default="")
 
     # Transcript stored as JSON text -- list of {role, text, timestamp, audio_duration_sec}
     transcript_json: Mapped[str] = mapped_column(Text, default="[]")
@@ -110,3 +112,42 @@ class ReportRow(Base):
 
     def get_report(self) -> dict:
         return json.loads(self.report_json) if self.report_json else {}
+
+
+class UserProgressRow(Base):
+    """Device-scoped user progress for Duo-style XP, level, and streaks."""
+
+    __tablename__ = "user_progress"
+
+    user_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    last_practice_date: Mapped[str] = mapped_column(String(10), default="")
+    streak_days: Mapped[int] = mapped_column(Integer, default=0)
+    total_xp: Mapped[int] = mapped_column(Integer, default=0)
+    xp_today: Mapped[int] = mapped_column(Integer, default=0)
+    sessions_today: Mapped[int] = mapped_column(Integer, default=0)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now())
+
+
+class UserProfileRow(Base):
+    """User account profile: age and selected career path (Duolingo-style profession)."""
+
+    __tablename__ = "user_profile"
+
+    user_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    age: Mapped[int] = mapped_column(Integer, default=18)
+    profession: Mapped[str] = mapped_column(String(64), default="data_scientist")
+    completed_lessons_json: Mapped[str] = mapped_column(Text, default="[]")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now())
+
+    def get_completed_lessons(self) -> list[dict]:
+        try:
+            return json.loads(self.completed_lessons_json) if self.completed_lessons_json else []
+        except (json.JSONDecodeError, AttributeError):
+            return []
+
+    def set_completed_lessons(self, lessons: list[dict]) -> None:
+        self.completed_lessons_json = json.dumps(lessons, default=str)

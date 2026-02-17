@@ -50,6 +50,12 @@ class InterviewSetupRequest(BaseModel):
     company: str = Field(default="", description="Target company (optional)")
     difficulty: str = Field(default="medium", description="easy, medium, hard")
     num_questions: int = Field(default=5, ge=1, le=15)
+    practice_mode: Optional[str] = Field(
+        default=None, description="quick (2-3 questions) or full"
+    )
+    topic: Optional[str] = Field(
+        default=None, description="Single topic for quick practice (e.g. Conflict Resolution)"
+    )
 
 
 class InterviewSession(BaseModel):
@@ -61,6 +67,8 @@ class InterviewSession(BaseModel):
     difficulty: str
     num_questions: int
     status: SessionStatus = SessionStatus.setup
+    practice_mode: Optional[str] = Field(default=None, description="quick or full")
+    topic: Optional[str] = Field(default=None, description="Single topic for quick practice")
     created_at: datetime = Field(default_factory=datetime.utcnow)
     transcript: list[TranscriptEntry] = Field(default_factory=list)
     face_data: list[FaceSnapshot] = Field(default_factory=list)
@@ -207,6 +215,16 @@ class FeedbackReport(BaseModel):
     top_improvements: list[str] = Field(default_factory=list)
     action_items: list[str] = Field(default_factory=list)
     generated_at: datetime = Field(default_factory=datetime.utcnow)
+    # Duo-style progress (set when X-User-Id header is sent)
+    xp_earned: Optional[int] = None
+    total_xp: Optional[int] = None
+    level: Optional[int] = None
+    streak_days: Optional[int] = None
+    xp_today: Optional[int] = None
+    sessions_today: Optional[int] = None
+    # Practice weak skills: recommend next topic for quick practice
+    recommended_topic: Optional[str] = None
+    recommended_interview_type: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------

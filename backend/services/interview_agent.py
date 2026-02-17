@@ -146,7 +146,13 @@ class InterviewAgent:
     Falls back gracefully to static question bank when Neo4j is unavailable.
     """
 
-    def __init__(self, llm: LLMProvider, session: InterviewSession):
+    def __init__(
+        self,
+        llm: LLMProvider,
+        session: InterviewSession,
+        age_bucket: str | None = None,
+        age_instruction: str | None = None,
+    ):
         self._llm = llm
         self._session = session
         self._messages: list[dict[str, str]] = []
@@ -154,10 +160,14 @@ class InterviewAgent:
         self._rag_context_text: str = ""
 
         # Initialize interview state for adaptive behavior
-        all_topics = _get_topic_list(session.interview_type, session.role)
-        sample_size = min(6, len(all_topics))
-        session_topics = random.sample(
-            all_topics, sample_size) if all_topics else []
+        # Quick practice: single topic; full: sample of topics
+        if getattr(session, "topic", None) and session.topic:
+            session_topics = [session.topic]
+        else:
+            all_topics = _get_topic_list(session.interview_type, session.role)
+            sample_size = min(6, len(all_topics))
+            session_topics = random.sample(
+                all_topics, sample_size) if all_topics else []
 
         self._state = InterviewState(
             questions_remaining=session.num_questions,
@@ -169,11 +179,13 @@ class InterviewAgent:
         topic_suggestions = _get_topic_suggestions(session_topics)
         sample_questions = _get_sample_questions(
             session.interview_type, session.role)
+        age_instruction_text = age_instruction or ""
 
         self._base_system_prompt = self._prompts.SYSTEM_PROMPT.format(
             role=session.role,
             company_clause=company_clause,
             difficulty=session.difficulty,
+            age_instruction=age_instruction_text,
         ) + topic_suggestions + sample_questions
 
         # Full prompt is assembled in generate_opening after RAG retrieval
@@ -264,10 +276,13 @@ class InterviewAgent:
                     f"for {self._session.role}"
                 )
 
+            topic = getattr(self._session, "topic", None) or ""
+
             ctx = await rag_retriever.get_interview_context(
                 interview_type=self._session.interview_type.value,
                 role=self._session.role,
                 company=self._session.company,
+                topic=topic,
                 query_text=query_text,
             )
             new_text = ctx.format_for_prompt()

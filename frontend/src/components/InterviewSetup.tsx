@@ -12,11 +12,13 @@ import {
   Database,
   ChevronDown,
 } from "lucide-react";
-import type { InterviewSetupRequest } from "@/lib/api";
+import { getSkillPath, type InterviewSetupRequest, type SkillPathSection } from "@/lib/api";
 
 interface Props {
   onStart: (setup: InterviewSetupRequest) => void;
   isLoading: boolean;
+  presetQuickPractice?: { topic: string; interviewType: InterviewSetupRequest["interview_type"] } | null;
+  onPresetApplied?: () => void;
 }
 
 const INTERVIEW_TYPES = [
@@ -73,6 +75,12 @@ const DIFFICULTIES = [
   },
 ];
 
+const TOPICS_BY_TYPE: Record<InterviewSetupRequest["interview_type"], string[]> = {
+  behavioral: ["Leadership", "Conflict Resolution", "Teamwork", "Problem Solving", "Adaptability", "Communication"],
+  technical: ["System Design", "Algorithms", "Data Structures", "Machine Learning", "SQL & Databases", "Statistics"],
+  case_study: ["Market Sizing", "Profitability", "Growth Strategy", "Product Strategy"],
+};
+
 const FEATURES = [
   { icon: Mic, label: "Voice AI", description: "Natural conversation", color: "var(--duo-green)", bg: "var(--duo-green-light)" },
   { icon: Eye, label: "Face Tracking", description: "Expression analysis", color: "var(--duo-blue)", bg: "var(--duo-blue-light)" },
@@ -98,7 +106,7 @@ const SEEDED_COMPANIES = [
   "Two Sigma",
 ];
 
-export default function InterviewSetup({ onStart, isLoading }: Props) {
+export default function InterviewSetup({ onStart, isLoading, presetQuickPractice, onPresetApplied }: Props) {
   const [interviewType, setInterviewType] =
     useState<InterviewSetupRequest["interview_type"]>("behavioral");
   const [role, setRole] = useState("Software Engineer");
@@ -106,9 +114,16 @@ export default function InterviewSetup({ onStart, isLoading }: Props) {
   const [difficulty, setDifficulty] =
     useState<InterviewSetupRequest["difficulty"]>("medium");
   const [numQuestions, setNumQuestions] = useState(5);
+  const [practiceMode, setPracticeMode] = useState<"full" | "quick">("full");
+  const [topic, setTopic] = useState("");
 
   const [companyOpen, setCompanyOpen] = useState(false);
+  const [skillPath, setSkillPath] = useState<SkillPathSection[]>([]);
   const companyRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    getSkillPath().then((data) => setSkillPath(data.path || []));
+  }, []);
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -132,17 +147,84 @@ export default function InterviewSetup({ onStart, isLoading }: Props) {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const num = practiceMode === "quick" ? 3 : numQuestions;
     onStart({
       interview_type: interviewType,
       role,
       company,
       difficulty,
-      num_questions: numQuestions,
+      num_questions: num,
+      practice_mode: practiceMode,
+      topic: practiceMode === "quick" && topic ? topic : undefined,
     });
+  };
+
+  const topicsForType = TOPICS_BY_TYPE[interviewType];
+
+  useEffect(() => {
+    if (practiceMode === "quick") {
+      const list = TOPICS_BY_TYPE[interviewType];
+      if (list.length > 0 && (!topic || !list.includes(topic))) {
+        setTopic(list[0]);
+      }
+    }
+  }, [practiceMode, interviewType]);
+
+  useEffect(() => {
+    if (presetQuickPractice) {
+      setInterviewType(presetQuickPractice.interviewType);
+      setPracticeMode("quick");
+      setTopic(presetQuickPractice.topic);
+      onPresetApplied?.();
+    }
+  }, [presetQuickPractice]);
+
+  const canSubmit = role.trim() && (practiceMode === "full" || (practiceMode === "quick" && topic));
+
+  const handlePathTopicClick = (interviewType: InterviewSetupRequest["interview_type"], topicName: string) => {
+    setInterviewType(interviewType);
+    setPracticeMode("quick");
+    setTopic(topicName);
   };
 
   return (
     <div className="max-w-2xl mx-auto">
+      {/* Skill path (Duo-style): click a topic to quick-practice */}
+      {skillPath.length > 0 && (
+        <div className="mb-8">
+          <label className="block text-sm font-bold uppercase tracking-wide mb-3" style={{ color: "var(--duo-wolf)" }}>
+            Practice Path
+          </label>
+          <div className="flex flex-wrap gap-2">
+            {skillPath.map((section) => (
+              <div key={section.interview_type} className="flex flex-wrap items-center gap-1.5">
+                <span className="text-xs font-bold px-2 py-0.5 rounded" style={{ background: "var(--duo-polar)", color: "var(--duo-eel)" }}>
+                  {section.interview_type.replace("_", " ")}
+                </span>
+                {section.topics.map((t) => {
+                  const isSelected = practiceMode === "quick" && topic === t && interviewType === section.interview_type;
+                  return (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => handlePathTopicClick(section.interview_type, t)}
+                      className="text-xs font-semibold px-2.5 py-1 rounded-xl transition-all"
+                      style={
+                        isSelected
+                          ? { background: "var(--duo-green)", color: "white" }
+                          : { background: "var(--duo-polar)", color: "var(--duo-eel)" }
+                      }
+                    >
+                      {t}
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Hero */}
       <div className="text-center mb-8">
         <motion.div
@@ -243,6 +325,89 @@ export default function InterviewSetup({ onStart, isLoading }: Props) {
             })}
           </div>
         </div>
+
+        {/* Practice mode: Quick vs Full */}
+        <div>
+          <label className="block text-sm font-bold uppercase tracking-wide mb-3" style={{ color: "var(--duo-wolf)" }}>
+            Practice Mode
+          </label>
+          <div className="grid grid-cols-2 gap-3">
+            <motion.button
+              type="button"
+              onClick={() => setPracticeMode("full")}
+              whileTap={{ scale: 0.97 }}
+              className="duo-card text-left"
+              style={
+                practiceMode === "full"
+                  ? {
+                      borderColor: "var(--duo-blue)",
+                      background: "var(--duo-blue-light)",
+                      borderLeftWidth: "4px",
+                    }
+                  : {}
+              }
+            >
+              <div className="font-bold text-sm" style={{ color: "var(--duo-eel)" }}>
+                Full interview
+              </div>
+              <div className="text-xs font-medium mt-1" style={{ color: "var(--duo-wolf)" }}>
+                5–15 questions, full run
+              </div>
+            </motion.button>
+            <motion.button
+              type="button"
+              onClick={() => setPracticeMode("quick")}
+              whileTap={{ scale: 0.97 }}
+              className="duo-card text-left"
+              style={
+                practiceMode === "quick"
+                  ? {
+                      borderColor: "var(--duo-green)",
+                      background: "var(--duo-green-light)",
+                      borderLeftWidth: "4px",
+                    }
+                  : {}
+              }
+            >
+              <div className="font-bold text-sm" style={{ color: "var(--duo-eel)" }}>
+                Quick practice
+              </div>
+              <div className="text-xs font-medium mt-1" style={{ color: "var(--duo-wolf)" }}>
+                2–3 questions, one topic
+              </div>
+            </motion.button>
+          </div>
+        </div>
+
+        {/* Topic (quick mode only) */}
+        {practiceMode === "quick" && (
+          <div>
+            <label
+              htmlFor="topic"
+              className="block text-sm font-bold uppercase tracking-wide mb-2"
+              style={{ color: "var(--duo-wolf)" }}
+            >
+              Topic
+            </label>
+            <select
+              id="topic"
+              value={topic}
+              onChange={(e) => setTopic(e.target.value)}
+              className="w-full px-4 py-3 rounded-2xl text-base font-semibold focus:outline-none transition-all"
+              style={{
+                border: "2px solid var(--duo-polar)",
+                color: "var(--duo-eel)",
+                background: "white",
+              }}
+            >
+              {topicsForType.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {/* Role */}
         <div>
@@ -418,35 +583,37 @@ export default function InterviewSetup({ onStart, isLoading }: Props) {
           </div>
         </div>
 
-        {/* Number of questions */}
-        <div>
-          <label
-            htmlFor="numQuestions"
-            className="block text-sm font-bold uppercase tracking-wide mb-2"
-            style={{ color: "var(--duo-wolf)" }}
-          >
-            Number of Questions:{" "}
-            <span
-              className="inline-block px-3 py-0.5 rounded-full text-sm font-extrabold"
-              style={{ background: "var(--duo-green-light)", color: "var(--duo-green-push)" }}
+        {/* Number of questions (full mode only) */}
+        {practiceMode === "full" && (
+          <div>
+            <label
+              htmlFor="numQuestions"
+              className="block text-sm font-bold uppercase tracking-wide mb-2"
+              style={{ color: "var(--duo-wolf)" }}
             >
-              {numQuestions}
-            </span>
-          </label>
-          <input
-            id="numQuestions"
-            type="range"
-            min={3}
-            max={15}
-            value={numQuestions}
-            onChange={(e) => setNumQuestions(Number(e.target.value))}
-            className="w-full"
-          />
-          <div className="flex justify-between text-xs font-semibold mt-1" style={{ color: "var(--duo-hare)" }}>
-            <span>3 (quick)</span>
-            <span>15 (thorough)</span>
+              Number of Questions:{" "}
+              <span
+                className="inline-block px-3 py-0.5 rounded-full text-sm font-extrabold"
+                style={{ background: "var(--duo-green-light)", color: "var(--duo-green-push)" }}
+              >
+                {numQuestions}
+              </span>
+            </label>
+            <input
+              id="numQuestions"
+              type="range"
+              min={3}
+              max={15}
+              value={numQuestions}
+              onChange={(e) => setNumQuestions(Number(e.target.value))}
+              className="w-full"
+            />
+            <div className="flex justify-between text-xs font-semibold mt-1" style={{ color: "var(--duo-hare)" }}>
+              <span>3 (quick)</span>
+              <span>15 (thorough)</span>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Start button / Loading overlay */}
         {isLoading ? (
@@ -454,7 +621,7 @@ export default function InterviewSetup({ onStart, isLoading }: Props) {
         ) : (
           <motion.button
             type="submit"
-            disabled={!role.trim()}
+            disabled={!canSubmit}
             whileHover={{ scale: 1.01 }}
             whileTap={{ scale: 0.98 }}
             className="btn-3d btn-3d-green w-full py-4 text-lg"

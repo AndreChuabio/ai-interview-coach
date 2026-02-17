@@ -105,6 +105,10 @@ class FeedbackEngine:
 
         action_items = self._generate_action_items(content, communication, body_language)
 
+        recommended_topic, recommended_interview_type = self._recommend_topic(
+            session, top_improvements
+        )
+
         return FeedbackReport(
             session_id=session.session_id,
             interview_type=session.interview_type,
@@ -117,6 +121,8 @@ class FeedbackEngine:
             top_strengths=top_strengths,
             top_improvements=top_improvements,
             action_items=action_items,
+            recommended_topic=recommended_topic,
+            recommended_interview_type=recommended_interview_type,
         )
 
     async def _analyze_content(
@@ -445,3 +451,35 @@ class FeedbackEngine:
             items.append("Great performance overall. Keep practicing to maintain your edge.")
 
         return items[:5]
+
+    def _recommend_topic(
+        self, session: InterviewSession, top_improvements: list[str]
+    ) -> tuple[str | None, str | None]:
+        """Suggest a topic for quick practice based on improvements. Returns (topic_name, interview_type)."""
+        from backend.knowledge.seed_data import TOPICS
+
+        improvement_text = " ".join(top_improvements).lower()
+        keyword_to_topic: list[tuple[list[str], str, str]] = [
+            (["conflict", "disagreement"], "Conflict Resolution", "behavioral"),
+            (["leadership", "lead"], "Leadership", "behavioral"),
+            (["team", "collaboration"], "Teamwork", "behavioral"),
+            (["structure", "star", "specificity", "relevance"], "Problem Solving", "behavioral"),
+            (["communication", "pace", "filler", "clarity", "confidence"], "Communication", "behavioral"),
+            (["system design", "design"], "System Design", "technical"),
+            (["algorithm", "coding"], "Algorithms", "technical"),
+            (["sql", "database"], "SQL & Databases", "technical"),
+            (["market sizing", "sizing"], "Market Sizing", "case_study"),
+            (["profit", "profitability"], "Profitability", "case_study"),
+        ]
+        for keywords, topic_name, itype in keyword_to_topic:
+            if any(kw in improvement_text for kw in keywords):
+                return (topic_name, itype)
+
+        type_str = session.interview_type.value
+        first_topic = next(
+            (t["name"] for t in TOPICS if t.get("category") == type_str),
+            None,
+        )
+        if first_topic:
+            return (first_topic, type_str)
+        return (None, None)

@@ -10,6 +10,8 @@ export interface InterviewSetupRequest {
   company: string;
   difficulty: "easy" | "medium" | "hard";
   num_questions: number;
+  practice_mode?: "quick" | "full";
+  topic?: string;
 }
 
 export interface InterviewSession {
@@ -20,6 +22,8 @@ export interface InterviewSession {
   difficulty: string;
   num_questions: number;
   status: string;
+  practice_mode?: string | null;
+  topic?: string | null;
   transcript: TranscriptEntry[];
 }
 
@@ -102,17 +106,53 @@ export interface FeedbackReport {
   top_strengths: string[];
   top_improvements: string[];
   action_items: string[];
+  xp_earned?: number;
+  total_xp?: number;
+  level?: number;
+  streak_days?: number;
+  xp_today?: number;
+  sessions_today?: number;
+  recommended_topic?: string;
+  recommended_interview_type?: string;
 }
 
-/** Start a new interview session. */
+export interface UserProgress {
+  total_xp: number;
+  level: number;
+  streak_days: number;
+  xp_today: number;
+  sessions_today?: number;
+  last_practice_date?: string;
+}
+
+const USER_ID_KEY = "interview_coach_user_id";
+
+export function getOrCreateUserId(): string {
+  if (typeof window === "undefined") return "";
+  let id = localStorage.getItem(USER_ID_KEY);
+  if (!id) {
+    id = "usr_" + Math.random().toString(36).slice(2, 14) + Date.now().toString(36);
+    localStorage.setItem(USER_ID_KEY, id);
+  }
+  return id;
+}
+
+/** Start a new interview session. Sends X-User-Id for hearts limit. */
 export async function startInterview(
-  setup: InterviewSetupRequest
+  setup: InterviewSetupRequest,
+  userId?: string
 ): Promise<InterviewSession> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (userId) headers["X-User-Id"] = userId;
   const res = await fetch(`${API_BASE}/interview/start`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify(setup),
   });
+  if (res.status === 429) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.detail || "Daily limit reached (5 practices). Come back tomorrow.");
+  }
   if (!res.ok) throw new Error(`Start interview failed: ${res.status}`);
   return res.json();
 }
@@ -171,14 +211,118 @@ export async function submitFaceData(
   });
 }
 
-/** Generate feedback report for a completed session. */
+/** Generate feedback report for a completed session. Sends X-User-Id for progress. */
 export async function generateFeedback(
-  sessionId: string
+  sessionId: string,
+  userId?: string
 ): Promise<FeedbackReport> {
+  const headers: Record<string, string> = {};
+  if (userId) headers["X-User-Id"] = userId;
   const res = await fetch(`${API_BASE}/feedback/generate/${sessionId}`, {
     method: "POST",
+    headers,
   });
   if (!res.ok) throw new Error(`Generate feedback failed: ${res.status}`);
+  return res.json();
+}
+
+/** Fetch Duo-style progress for the current user. */
+export async function getProgress(userId: string): Promise<UserProgress> {
+  const res = await fetch(`${API_BASE}/feedback/progress`, {
+    headers: { "X-User-Id": userId },
+  });
+  if (!res.ok) return { total_xp: 0, level: 1, streak_days: 0, xp_today: 0 };
+  return res.json();
+}
+
+export interface UserProfile {
+  user_id: string;
+  age: number;
+  profession: string;
+  age_bucket: string;
+  completed_lessons: { profession: string; skill_id: string; lesson_id: string }[];
+}
+
+export interface CareerPathLesson {
+  id: string;
+  name: string;
+  type: string;
+  completed: boolean;
+  unlocked: boolean;
+}
+
+export interface CareerPathSkill {
+  id: string;
+  name: string;
+  lessons: CareerPathLesson[];
+}
+
+export interface CareerPathResponse {
+  profession: string;
+  info: { name: string; role: string; description?: string };
+  skills: CareerPathSkill[];
+}
+
+/** Get current user profile (age, profession). Sends X-User-Id. */
+export async function getProfile(userId: string): Promise<UserProfile> {
+  const res = await fetch(`${API_BASE}/user/profile`, {
+    headers: { "X-User-Id": userId },
+  });
+  if (!res.ok) throw new Error(`Get profile failed: ${res.status}`);
+  return res.json();
+}
+
+/** Set profile: age and profession. */
+export async function setProfile(
+  userId: string,
+  body: { age: number; profession: string }
+): Promise<UserProfile> {
+  const res = await fetch(`${API_BASE}/user/profile`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-User-Id": userId },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`Set profile failed: ${res.status}`);
+  return res.json();
+}
+
+/** Get career path for a profession with completion/unlock state. */
+export async function getCareerPath(
+  profession: string,
+  userId?: string
+): Promise<CareerPathResponse> {
+  const headers: Record<string, string> = {};
+  if (userId) headers["X-User-Id"] = userId;
+  const res = await fetch(
+    `${API_BASE}/user/career-path?profession=${encodeURIComponent(profession)}`,
+    { headers }
+  );
+  if (!res.ok) throw new Error(`Get career path failed: ${res.status}`);
+  return res.json();
+}
+
+/** Mark a lesson complete. */
+export async function recordLessonComplete(
+  userId: string,
+  body: { profession: string; skill_id: string; lesson_id: string }
+): Promise<void> {
+  const res = await fetch(`${API_BASE}/user/lesson-complete`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-User-Id": userId },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`Lesson complete failed: ${res.status}`);
+}
+
+export interface SkillPathSection {
+  interview_type: "behavioral" | "technical" | "case_study";
+  topics: string[];
+}
+
+/** Fetch skill path for progress path UI. */
+export async function getSkillPath(): Promise<{ path: SkillPathSection[] }> {
+  const res = await fetch(`${API_BASE}/interview/path`);
+  if (!res.ok) return { path: [] };
   return res.json();
 }
 

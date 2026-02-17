@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.config import settings
-from backend.routers import interview, feedback
+from backend.routers import interview, feedback, user
 
 logging.basicConfig(
     level=logging.INFO,
@@ -36,6 +36,7 @@ logger.info("CORS origins: %s", settings.cors_origins)
 
 app.include_router(interview.router, prefix="/api/interview", tags=["interview"])
 app.include_router(feedback.router, prefix="/api/feedback", tags=["feedback"])
+app.include_router(user.router, prefix="/api/user", tags=["user"])
 
 
 @app.on_event("startup")
