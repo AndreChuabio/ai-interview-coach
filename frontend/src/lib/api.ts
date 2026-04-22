@@ -182,6 +182,107 @@ export async function generateFeedback(
   return res.json();
 }
 
+/* ------------------------------------------------------------------ */
+/* Trainer (flashcards) API                                           */
+/* ------------------------------------------------------------------ */
+
+export interface TrainerCard {
+  id: number;
+  deck: string;
+  topic: string;
+  question: string;
+  reference_answer: string;
+  difficulty: string;
+}
+
+export interface NextCardResponse {
+  card: TrainerCard | null;
+  remaining_new: number;
+  remaining_review: number;
+}
+
+export interface AnswerResponse {
+  card_id: number;
+  score: number;
+  grade: number;
+  feedback: string;
+  missing_concepts: string[];
+  reference_answer: string;
+}
+
+export interface ProgressSummary {
+  total_reviews: number;
+  accuracy: number;
+  streak_days: number;
+  mastered: number;
+  learning: number;
+  struggling: number;
+  new: number;
+  total_cards: number;
+  recent_reviews: Array<{
+    card_id: number;
+    grade: number;
+    llm_score: number;
+    reviewed_at: string | null;
+  }>;
+}
+
+export async function registerLearner(
+  learnerId: string,
+  displayName = ""
+): Promise<void> {
+  await fetch(`${API_BASE}/trainer/learner`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ learner_id: learnerId, display_name: displayName }),
+  });
+}
+
+export async function getNextCard(
+  learnerId: string,
+  deck = "ml_fundamentals"
+): Promise<NextCardResponse> {
+  const res = await fetch(
+    `${API_BASE}/trainer/decks/${deck}/next?learner_id=${encodeURIComponent(
+      learnerId
+    )}`
+  );
+  if (!res.ok) throw new Error(`Next card failed: ${res.status}`);
+  return res.json();
+}
+
+export async function submitCardAnswer(
+  cardId: number,
+  learnerId: string,
+  userAnswer: string,
+  timeSpentMs: number
+): Promise<AnswerResponse> {
+  const res = await fetch(`${API_BASE}/trainer/cards/${cardId}/answer`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      learner_id: learnerId,
+      user_answer: userAnswer,
+      time_spent_ms: timeSpentMs,
+    }),
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(`Submit answer failed (${res.status}): ${detail}`);
+  }
+  return res.json();
+}
+
+export async function getProgress(
+  learnerId: string
+): Promise<ProgressSummary> {
+  const res = await fetch(
+    `${API_BASE}/trainer/progress?learner_id=${encodeURIComponent(learnerId)}`
+  );
+  if (!res.ok) throw new Error(`Progress failed: ${res.status}`);
+  return res.json();
+}
+
 /** Check backend health and active providers. */
 export async function healthCheck(): Promise<{
   status: string;

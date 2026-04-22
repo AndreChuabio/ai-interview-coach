@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.config import settings
-from backend.routers import interview, feedback
+from backend.routers import feedback, interview, trainer
 
 logging.basicConfig(
     level=logging.INFO,
@@ -36,6 +36,7 @@ logger.info("CORS origins: %s", settings.cors_origins)
 
 app.include_router(interview.router, prefix="/api/interview", tags=["interview"])
 app.include_router(feedback.router, prefix="/api/feedback", tags=["feedback"])
+app.include_router(trainer.router, prefix="/api/trainer", tags=["trainer"])
 
 
 @app.on_event("startup")
@@ -46,6 +47,16 @@ async def startup():
     from backend.db.engine import init_db
     await init_db()
     logger.info("Database tables initialized")
+
+    # 1b. Seed the curated ML flashcard deck if it's empty.
+    try:
+        from backend.services.trainer_engine import seed_curated_deck_if_empty
+        inserted = await seed_curated_deck_if_empty()
+        if inserted:
+            logger.info("Seeded %d curated ML flashcards", inserted)
+    except Exception as exc:
+        logger.warning(
+            "Could not seed curated ML deck (non-fatal): %s", exc)
 
     # 2. STT / embedding models are loaded lazily on first request.
     #    Pre-loading them here exceeds the 1.75 GB RAM on Azure B1

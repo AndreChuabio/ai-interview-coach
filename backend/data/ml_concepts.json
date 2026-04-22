@@ -1,0 +1,229 @@
+[
+  {
+    "topic": "Fundamentals",
+    "difficulty": "easy",
+    "question": "What is the difference between supervised and unsupervised learning?",
+    "reference_answer": "Supervised learning uses labeled data -- each training example has an input and a known target -- to learn a mapping from inputs to outputs (e.g. classification, regression). Unsupervised learning uses unlabeled data and tries to find structure on its own, such as clusters (k-means), lower-dimensional representations (PCA), or density (GMM)."
+  },
+  {
+    "topic": "Fundamentals",
+    "difficulty": "easy",
+    "question": "What is the bias-variance tradeoff?",
+    "reference_answer": "Bias is error from oversimplified assumptions that cause the model to underfit. Variance is error from being too sensitive to the training data, causing the model to overfit. Total expected error decomposes into bias^2 + variance + irreducible noise. Increasing model complexity typically lowers bias but raises variance; regularization, more data, or simpler models reduce variance."
+  },
+  {
+    "topic": "Fundamentals",
+    "difficulty": "easy",
+    "question": "Define overfitting and name three ways to reduce it.",
+    "reference_answer": "Overfitting is when a model fits training data too closely, including noise, and generalizes poorly to new data (large gap between train and validation error). Mitigations: (1) regularization (L1/L2, dropout), (2) more training data or data augmentation, (3) reduce model capacity, (4) early stopping, (5) cross-validation to pick hyperparameters."
+  },
+  {
+    "topic": "Fundamentals",
+    "difficulty": "medium",
+    "question": "Explain the curse of dimensionality.",
+    "reference_answer": "As the number of features grows, the volume of the feature space grows exponentially, so data points become sparse. Distances between points concentrate (nearest and farthest look similar), making distance-based methods like kNN and clustering unreliable. It also means you need exponentially more data to densely cover the space, and models overfit more easily. Dimensionality reduction (PCA), feature selection, and regularization help."
+  },
+  {
+    "topic": "Fundamentals",
+    "difficulty": "medium",
+    "question": "What is the difference between a parametric and non-parametric model?",
+    "reference_answer": "A parametric model has a fixed number of parameters independent of dataset size (e.g. linear regression, logistic regression, neural networks with a fixed architecture). A non-parametric model's effective parameter count grows with the data (e.g. kNN, decision trees, kernel methods, Gaussian processes). Non-parametric models are more flexible but need more data and are typically slower at inference."
+  },
+
+  {
+    "topic": "Linear Models",
+    "difficulty": "easy",
+    "question": "What is the loss function for linear regression and what assumption does it imply about the errors?",
+    "reference_answer": "Mean squared error (MSE): (1/n) * sum((y_i - y_hat_i)^2). Minimizing MSE is equivalent to the maximum likelihood estimator under the assumption that errors are independent and normally distributed with constant variance (homoscedastic Gaussian noise)."
+  },
+  {
+    "topic": "Linear Models",
+    "difficulty": "easy",
+    "question": "What does logistic regression predict, and what loss function is used to train it?",
+    "reference_answer": "Logistic regression predicts the probability that an input belongs to the positive class by passing a linear combination of features through a sigmoid (1/(1+e^-z)). It is trained by minimizing binary cross-entropy (log loss): -sum(y log p + (1-y) log (1-p)), which is the negative log-likelihood under a Bernoulli model."
+  },
+  {
+    "topic": "Linear Models",
+    "difficulty": "medium",
+    "question": "What is the difference between L1 and L2 regularization?",
+    "reference_answer": "L1 (lasso) adds lambda * sum(|w_i|) to the loss. It produces sparse solutions because the sub-gradient at zero can drive weights exactly to zero, effectively performing feature selection. L2 (ridge) adds lambda * sum(w_i^2), shrinking weights toward zero smoothly without zeroing them out, which handles multicollinearity well. Elastic net combines both."
+  },
+
+  {
+    "topic": "Trees and Ensembles",
+    "difficulty": "easy",
+    "question": "How does a decision tree decide which feature to split on?",
+    "reference_answer": "At each node it picks the feature and threshold that maximize a purity gain -- commonly information gain (reduction in entropy) for classification, Gini impurity reduction, or variance reduction (MSE) for regression. It evaluates candidate splits greedily and recurses until a stopping criterion (max depth, min samples, minimum gain) is met."
+  },
+  {
+    "topic": "Trees and Ensembles",
+    "difficulty": "medium",
+    "question": "What is the difference between bagging and boosting?",
+    "reference_answer": "Bagging (bootstrap aggregating) trains many models in parallel on bootstrap samples and averages them; it reduces variance (random forests are the canonical example). Boosting trains models sequentially, each focused on the errors of the previous ones, and combines them additively; it reduces bias (AdaBoost, gradient boosting, XGBoost). Bagging is more robust to noise; boosting typically achieves higher accuracy but can overfit if not regularized."
+  },
+  {
+    "topic": "Trees and Ensembles",
+    "difficulty": "medium",
+    "question": "What does 'gradient' mean in gradient boosting?",
+    "reference_answer": "Each new tree is fit to the negative gradient of the loss with respect to the current ensemble's predictions -- these are the 'pseudo-residuals'. For squared loss this reduces to fitting the raw residuals y - y_hat; for log loss it fits a different function of the predicted probabilities. Step size is controlled by the learning rate; shallow trees and subsampling are common regularizers."
+  },
+
+  {
+    "topic": "Training Dynamics",
+    "difficulty": "easy",
+    "question": "Explain gradient descent in one sentence, and how stochastic gradient descent differs.",
+    "reference_answer": "Gradient descent updates parameters in the direction of the negative gradient of the loss averaged over the full dataset: w <- w - lr * grad_L(w). Stochastic gradient descent (SGD) estimates the gradient from a single example (or mini-batch), which is noisier but much cheaper per step and can escape shallow local minima; it is the standard for training large models."
+  },
+  {
+    "topic": "Training Dynamics",
+    "difficulty": "easy",
+    "question": "What is the learning rate and what happens if it's too high or too low?",
+    "reference_answer": "The learning rate is the step size used when updating parameters from the gradient. Too high: updates overshoot minima, the loss oscillates or diverges. Too low: training is very slow and may get stuck in plateaus or shallow minima. Schedulers (cosine, step decay, warmup) and adaptive optimizers (Adam) help balance it."
+  },
+  {
+    "topic": "Training Dynamics",
+    "difficulty": "medium",
+    "question": "What is the vanishing gradient problem and how does ReLU help?",
+    "reference_answer": "In deep networks with saturating activations like sigmoid or tanh, gradients are repeatedly multiplied by values well below 1 during backprop, so they shrink to near zero in early layers and those layers stop learning. ReLU (max(0, x)) has a derivative of 1 on the active side, so gradients don't shrink through it, which lets much deeper networks train. Residual connections and batch/layer norm further help."
+  },
+  {
+    "topic": "Training Dynamics",
+    "difficulty": "medium",
+    "question": "What does batch normalization do and why does it help training?",
+    "reference_answer": "Batch norm normalizes the activations of a layer across the mini-batch to have zero mean and unit variance, then applies a learned scale and shift. It reduces internal covariate shift, lets you use higher learning rates, acts as a mild regularizer, and makes networks less sensitive to initialization. At inference it uses running-average statistics instead of batch statistics."
+  },
+
+  {
+    "topic": "Evaluation",
+    "difficulty": "easy",
+    "question": "Define precision, recall, and F1.",
+    "reference_answer": "Precision = TP / (TP + FP): of the items we called positive, how many were actually positive. Recall = TP / (TP + FN): of all actual positives, how many we caught. F1 = 2 * precision * recall / (precision + recall), the harmonic mean -- it's high only when both are high. Use precision when false positives are costly (spam filter), recall when false negatives are costly (cancer screening)."
+  },
+  {
+    "topic": "Evaluation",
+    "difficulty": "easy",
+    "question": "What does the ROC curve plot, and what does AUC mean?",
+    "reference_answer": "ROC plots true positive rate (recall) against false positive rate (FP / (FP + TN)) as the classification threshold varies from high to low. AUC is the area under that curve, equivalent to the probability that a random positive example is scored higher than a random negative one. AUC = 0.5 is random, 1.0 is perfect. AUC is threshold-independent but can be misleading on very imbalanced data; PR-AUC is often preferred there."
+  },
+  {
+    "topic": "Evaluation",
+    "difficulty": "medium",
+    "question": "Why is accuracy a bad metric on imbalanced datasets?",
+    "reference_answer": "If 99% of labels are negative, a model that always predicts negative has 99% accuracy but zero recall on positives and is useless. On imbalanced data, prefer precision/recall, F1, PR-AUC, ROC-AUC, balanced accuracy, or use per-class metrics. You can also resample (SMOTE, undersampling), reweight the loss, or adjust the decision threshold."
+  },
+  {
+    "topic": "Evaluation",
+    "difficulty": "medium",
+    "question": "What is k-fold cross-validation and when would you use stratified or time-series variants?",
+    "reference_answer": "k-fold CV splits the data into k folds, trains on k-1 and validates on the held-out fold, rotating k times, then averages the scores. It gives a lower-variance estimate of generalization than a single split. Stratified k-fold preserves class proportions in each fold -- important for imbalanced classification. For temporal data use TimeSeriesSplit so future data never leaks into training; random splits break temporal causality."
+  },
+
+  {
+    "topic": "Data Preparation",
+    "difficulty": "easy",
+    "question": "Why do we standardize or normalize features, and which models are sensitive to scale?",
+    "reference_answer": "Standardization (z-score) and min-max normalization put features on comparable scales. It matters for (a) distance-based methods (kNN, k-means, SVM with RBF), (b) regularized linear models, where unscaled features get unfairly penalized, and (c) gradient-based optimizers that converge faster on well-scaled inputs. Tree-based models (random forest, gradient boosting) are scale-invariant and don't need it."
+  },
+  {
+    "topic": "Data Preparation",
+    "difficulty": "easy",
+    "question": "What is data leakage and give one concrete example.",
+    "reference_answer": "Data leakage is when information from outside the training data (usually from the future or from the target) sneaks into training, causing overly optimistic validation scores that collapse in production. Example: fitting a StandardScaler on the full dataset before splitting -- the train split now 'knows' the mean and std of the test split. Fix: fit transforms only on training data and apply them to validation/test, ideally via a pipeline and cross-validation."
+  },
+  {
+    "topic": "Data Preparation",
+    "difficulty": "medium",
+    "question": "What are three common ways to handle missing values and when is each appropriate?",
+    "reference_answer": "(1) Drop rows or columns -- fine when missingness is rare and MCAR. (2) Simple imputation (mean, median, mode for numeric; most-frequent for categorical) -- cheap, reasonable when missingness is random. (3) Model-based imputation (KNN-impute, iterative imputer, MICE) -- better when features are correlated. Also: add a 'was_missing' indicator column, because the fact of missingness can itself be predictive."
+  },
+
+  {
+    "topic": "Neural Networks",
+    "difficulty": "easy",
+    "question": "What is backpropagation?",
+    "reference_answer": "Backpropagation is the algorithm used to compute gradients of the loss with respect to every parameter in a neural network efficiently. It is the chain rule applied to the computation graph: you do a forward pass to compute activations and the loss, then traverse the graph backward, multiplying local derivatives layer by layer, reusing intermediate results so the cost is O(number of edges) rather than O(params * edges)."
+  },
+  {
+    "topic": "Neural Networks",
+    "difficulty": "medium",
+    "question": "What is dropout and why does it reduce overfitting?",
+    "reference_answer": "Dropout randomly zeroes a fraction p of activations during training so any given neuron can't rely on specific other neurons being present. This forces redundant, distributed representations and approximates training an ensemble of sub-networks, which acts as strong regularization. At inference, dropout is disabled and activations are scaled (or weights were scaled during training -- 'inverted dropout') so expected values match."
+  },
+  {
+    "topic": "Neural Networks",
+    "difficulty": "medium",
+    "question": "Give the one-line intuition for what a convolutional layer does compared to a fully-connected layer.",
+    "reference_answer": "A convolutional layer applies the same small filter (weight sharing) across spatial locations, so it learns translation-equivariant local features with far fewer parameters than a fully-connected layer of equivalent input size. This makes it data-efficient and well-matched to images, audio spectrograms, and any signal with local structure."
+  },
+  {
+    "topic": "Neural Networks",
+    "difficulty": "medium",
+    "question": "In one or two sentences, what is self-attention in a transformer?",
+    "reference_answer": "Self-attention computes, for each token, a weighted sum of all other tokens' values, where the weights come from the scaled dot-product of that token's query with every token's key, passed through softmax. It lets each position aggregate information from the whole sequence in parallel, and the weights are content-dependent rather than based on fixed position."
+  },
+
+  {
+    "topic": "Probability and Statistics",
+    "difficulty": "easy",
+    "question": "What is Bayes' theorem?",
+    "reference_answer": "P(A | B) = P(B | A) * P(A) / P(B). In ML terms, posterior proportional to likelihood times prior. It is the foundation of Bayesian inference, naive Bayes classifiers, and how you update beliefs when you see new evidence."
+  },
+  {
+    "topic": "Probability and Statistics",
+    "difficulty": "easy",
+    "question": "What's the difference between a p-value and a confidence interval?",
+    "reference_answer": "A p-value is the probability of observing data at least as extreme as yours under a specified null hypothesis. A confidence interval is a range of plausible values for a parameter with a stated coverage (e.g. 95%) under repeated sampling. A CI conveys effect size and uncertainty; a p-value only tells you whether an effect is distinguishable from zero at a given threshold."
+  },
+  {
+    "topic": "Probability and Statistics",
+    "difficulty": "medium",
+    "question": "What is the central limit theorem and why does it matter in ML?",
+    "reference_answer": "Given i.i.d. samples with finite mean and variance, the distribution of the sample mean approaches a normal distribution as n grows, regardless of the underlying distribution. It justifies using Gaussian confidence intervals and z/t-tests for estimated means, underpins bootstrap intuition, and is why averaged metrics in ML experiments behave well even when individual measurements don't."
+  },
+
+  {
+    "topic": "Clustering and Dimensionality Reduction",
+    "difficulty": "easy",
+    "question": "How does k-means work and what are two weaknesses?",
+    "reference_answer": "k-means picks k centroids and alternates between (1) assigning each point to its nearest centroid and (2) moving each centroid to the mean of its assigned points, until convergence. Weaknesses: you must pick k in advance, it assumes spherical clusters of similar size, it's sensitive to initialization (use k-means++), and it's sensitive to feature scaling and outliers."
+  },
+  {
+    "topic": "Clustering and Dimensionality Reduction",
+    "difficulty": "medium",
+    "question": "What does PCA do?",
+    "reference_answer": "PCA finds the orthogonal directions (principal components) along which the data has maximum variance -- the eigenvectors of the covariance matrix, ordered by eigenvalue. Projecting the data onto the top k components gives the best rank-k linear approximation in least-squares sense. It's used for compression, noise reduction, visualization, and as a preprocessing step for models that suffer in high dimensions."
+  },
+
+  {
+    "topic": "NLP Basics",
+    "difficulty": "easy",
+    "question": "What is TF-IDF?",
+    "reference_answer": "Term Frequency-Inverse Document Frequency. TF counts how often a term appears in a document; IDF downweights terms that appear in many documents (log(N / df)). TF-IDF = TF * IDF gives a score that is high for terms that are frequent in a given document but rare across the corpus, making it a simple but effective feature representation for text classification and retrieval."
+  },
+  {
+    "topic": "NLP Basics",
+    "difficulty": "medium",
+    "question": "What's the difference between word2vec and a transformer embedding?",
+    "reference_answer": "word2vec learns a single static vector per word type from local co-occurrence; the word 'bank' has the same embedding regardless of context. A transformer produces contextual embeddings: the same token gets a different vector in 'river bank' versus 'savings bank' because self-attention mixes information from surrounding tokens. Transformer embeddings are also typically much higher-capacity and pre-trained on far more data."
+  },
+
+  {
+    "topic": "Recommender Systems",
+    "difficulty": "medium",
+    "question": "What is the cold-start problem in recommender systems?",
+    "reference_answer": "Cold start is the difficulty of making good recommendations when a user or item is new and has no interaction history -- collaborative filtering has nothing to learn from. Mitigations: use content-based features (item metadata, user demographics), hybrid models that fall back to content when interactions are sparse, popularity-based defaults, and explicit onboarding to collect preferences."
+  },
+
+  {
+    "topic": "MLOps",
+    "difficulty": "easy",
+    "question": "What is concept drift and what should you do about it?",
+    "reference_answer": "Concept drift is when the relationship between inputs and the target changes over time, so a model that was accurate degrades in production (e.g. user behavior shifts, new product categories appear). Mitigations: monitor prediction quality and input distributions, schedule periodic retraining, use online learning or sliding-window training, and set up alerts on performance/data drift metrics."
+  },
+  {
+    "topic": "MLOps",
+    "difficulty": "medium",
+    "question": "Why is a training/serving skew dangerous and how do you prevent it?",
+    "reference_answer": "Training/serving skew is when features seen at serving time don't match how they were computed at training time (different preprocessing, different data sources, different timing), so the model's inputs are silently wrong in production. Prevent it by using the same feature pipeline/library in both training and serving (feature stores help), logging serving inputs for validation, and evaluating on data produced by the serving pipeline."
+  }
+]

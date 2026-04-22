@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
+import { BookOpen } from "lucide-react";
 import InterviewSetup from "@/components/InterviewSetup";
 import InterviewSession from "@/components/InterviewSession";
 import FeedbackReportView from "@/components/FeedbackReport";
@@ -88,15 +90,25 @@ export default function Home() {
               AI Interview Coach
             </span>
           </div>
-          {phase !== "setup" && (
-            <button
-              onClick={handleRestart}
-              className="text-sm font-bold px-4 py-1.5 rounded-xl transition-colors"
-              style={{ color: "var(--duo-blue)" }}
+          <div className="flex items-center gap-4">
+            <Link
+              href="/trainer"
+              className="text-sm font-bold flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-colors"
+              style={{ color: "var(--duo-purple-push)", background: "var(--duo-purple-light)" }}
             >
-              New Interview
-            </button>
-          )}
+              <BookOpen className="w-4 h-4" />
+              Trainer
+            </Link>
+            {phase !== "setup" && (
+              <button
+                onClick={handleRestart}
+                className="text-sm font-bold px-4 py-1.5 rounded-xl transition-colors"
+                style={{ color: "var(--duo-blue)" }}
+              >
+                New Interview
+              </button>
+            )}
+          </div>
         </div>
       </nav>
 
