@@ -7,14 +7,7 @@
 const STORAGE_KEY = "trainer_learner_id";
 
 function randomId(): string {
-  // crypto.randomUUID is available in all modern browsers and Next.js targets.
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-    return crypto.randomUUID();
-  }
-  // Fallback: 24 hex chars of randomness.
-  const bytes = new Uint8Array(12);
-  crypto.getRandomValues(bytes);
-  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+  return crypto.randomUUID();
 }
 
 export function getLearnerId(): string {
