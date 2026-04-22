@@ -3,7 +3,7 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import { FolderOpen, FilePlus, X } from "lucide-react";
 
-const SUPPORTED_EXTENSIONS = [".pdf", ".md", ".markdown", ".txt"] as const;
+const SUPPORTED_EXTENSIONS = [".pdf", ".md", ".markdown", ".txt", ".docx", ".pptx", ".ipynb"] as const;
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
 const MAX_TOTAL_BYTES = 50 * 1024 * 1024;
 
@@ -190,7 +190,7 @@ export default function ClassFolderDrop({ onFilesChanged, disabled }: Props) {
           Drop a class folder here
         </div>
         <div className="text-sm font-medium" style={{ color: "var(--duo-wolf)" }}>
-          or click to pick — PDFs, markdown, and text files up to 20 MB each.
+          or click to pick — PDF, DOCX, PPTX, IPYNB, markdown, and text files up to 20 MB each.
         </div>
         <input
           ref={inputRef}
