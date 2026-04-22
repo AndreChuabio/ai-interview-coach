@@ -25,7 +25,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.db.engine import get_db
+from backend.db.engine import async_session_factory, get_db
 from backend.db.models import ClassChunkRow, ClassRow, FlashcardRow, ReviewRow
 from backend.services import class_ingestion, trainer_engine
 
@@ -273,6 +273,49 @@ async def list_classes(
         )
         for r in result.scalars()
     ]
+
+
+@router.post("/{class_id}/generate-cards", response_model=ClassStatusResponse)
+async def generate_more_cards(
+    class_id: str,
+    background: BackgroundTasks,
+    learner_id: str = Query(..., min_length=8),
+    count: int = Query(40, ge=1, le=200),
+    db: AsyncSession = Depends(get_db),
+):
+    """Top up cards for a class that's already ``ready``. Runs in the
+    background so the call returns immediately; poll /status."""
+    cls = await _owned(db, class_id, learner_id)
+    if cls.status not in ("ready", "failed"):
+        raise HTTPException(
+            status_code=409,
+            detail=f"Class is {cls.status}; wait for it to finish first",
+        )
+    previous_card_count = int(cls.card_count or 0)
+    cls.status = "generating"
+    cls.error_message = ""
+    await db.commit()
+
+    async def _run():
+        from backend.services import card_generator, class_ingestion
+        try:
+            await card_generator.generate_cards_for_class(
+                class_id, target=previous_card_count + count,
+            )
+            async with async_session_factory() as db2:
+                row = await db2.scalar(
+                    select(ClassRow).where(ClassRow.class_id == class_id))
+                if row is not None and row.status != "failed":
+                    row.status = "ready"
+                    await db2.commit()
+        except Exception as exc:
+            logger.exception(
+                "generate-cards background failed for %s: %s", class_id, exc)
+            await class_ingestion._mark_failed(
+                class_id, f"Card generation error: {exc}")
+
+    background.add_task(_run)
+    return await class_status(class_id, learner_id, db)
 
 
 @router.delete("/{class_id}")
