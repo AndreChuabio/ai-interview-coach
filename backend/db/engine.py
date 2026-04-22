@@ -88,6 +88,23 @@ async def init_db() -> None:
                     "ALTER TABLE sessions ADD COLUMN agent_messages_json TEXT DEFAULT '[]'")
             )
 
+        # Lightweight migration: add source_chunk_id to flashcards if missing.
+        # Used by the class-deck cards added in PR 6/7 so each card can be
+        # traced back to the ClassChunkRow that grounded its question.
+        def _flashcards_has(column: str):
+            def _inner(sync_conn):
+                inspector = sa_inspect(sync_conn)
+                if "flashcards" not in inspector.get_table_names():
+                    return True  # table doesn't exist yet; create_all will build it fresh
+                return column in [c["name"] for c in inspector.get_columns("flashcards")]
+            return _inner
+
+        has_src = await conn.run_sync(_flashcards_has("source_chunk_id"))
+        if not has_src:
+            await conn.execute(
+                text("ALTER TABLE flashcards ADD COLUMN source_chunk_id INTEGER")
+            )
+
 
 async def get_db() -> AsyncSession:
     """Yield an async database session (for FastAPI dependency injection)."""

@@ -45,3 +45,6 @@ tenacity>=8.2.0
 
 # -- Utilities --
 aiofiles>=24.1.0
+
+# -- Class materials ingestion (trainer) --
+pypdf>=4.0.0

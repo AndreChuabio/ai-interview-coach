@@ -12,7 +12,7 @@ import json
 from datetime import datetime
 from uuid import uuid4
 
-from sqlalchemy import Boolean, DateTime, Float, Integer, String, Text, func
+from sqlalchemy import Boolean, DateTime, Float, Integer, LargeBinary, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.db.engine import Base
@@ -140,11 +140,15 @@ class FlashcardRow(Base):
         Integer, primary_key=True, autoincrement=True)
     learner_id: Mapped[str] = mapped_column(
         String(64), index=True, default="")
-    deck: Mapped[str] = mapped_column(String(32), index=True)
+    deck: Mapped[str] = mapped_column(String(64), index=True)
     topic: Mapped[str] = mapped_column(String(128), index=True, default="")
     question: Mapped[str] = mapped_column(Text)
     reference_answer: Mapped[str] = mapped_column(Text)
     source_snippet: Mapped[str] = mapped_column(Text, default="")
+    # For class-deck cards, points back to the ClassChunkRow that grounded this
+    # card's question. Null for curated decks.
+    source_chunk_id: Mapped[int | None] = mapped_column(
+        Integer, index=True, nullable=True, default=None)
     difficulty: Mapped[str] = mapped_column(String(16), default="medium")
     is_curated: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(
@@ -178,3 +182,58 @@ class ReviewRow(Base):
             return json.loads(self.missing_concepts_json) if self.missing_concepts_json else []
         except (json.JSONDecodeError, AttributeError):
             return []
+
+
+class ClassRow(Base):
+    """An uploaded folder of class materials owned by one learner.
+
+    The deck column is always 'class:<class_id>' and mirrors the deck used on
+    the FlashcardRow rows generated from this class's chunks.
+    """
+
+    __tablename__ = "classes"
+
+    id: Mapped[int] = mapped_column(
+        Integer, primary_key=True, autoincrement=True)
+    class_id: Mapped[str] = mapped_column(
+        String(24), unique=True, index=True, default=_new_id)
+    learner_id: Mapped[str] = mapped_column(String(64), index=True)
+    title: Mapped[str] = mapped_column(String(200))
+    deck: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+
+    # Lifecycle: parsing -> embedding -> generating -> ready | failed
+    status: Mapped[str] = mapped_column(String(24), default="parsing")
+    file_count: Mapped[int] = mapped_column(Integer, default=0)
+    chunk_count: Mapped[int] = mapped_column(Integer, default=0)
+    card_count: Mapped[int] = mapped_column(Integer, default=0)
+    error_message: Mapped[str] = mapped_column(Text, default="")
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now())
+
+
+class ClassChunkRow(Base):
+    """One chunk of text extracted from a source file in a class.
+
+    The embedding is stored as np.float32(dim).tobytes() in a LargeBinary
+    column -- compact and portable across SQLite/Postgres without needing
+    pgvector.
+    """
+
+    __tablename__ = "class_chunks"
+
+    id: Mapped[int] = mapped_column(
+        Integer, primary_key=True, autoincrement=True)
+    class_id: Mapped[str] = mapped_column(String(24), index=True)
+    filename: Mapped[str] = mapped_column(String(512))
+    page: Mapped[int] = mapped_column(Integer, default=0)
+    heading: Mapped[str] = mapped_column(String(256), default="")
+    chunk_index: Mapped[int] = mapped_column(Integer, default=0)
+    text: Mapped[str] = mapped_column(Text)
+    token_estimate: Mapped[int] = mapped_column(Integer, default=0)
+    embedding: Mapped[bytes | None] = mapped_column(
+        LargeBinary, nullable=True, default=None)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now())
