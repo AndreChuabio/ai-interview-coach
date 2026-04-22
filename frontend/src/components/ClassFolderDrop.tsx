@@ -4,8 +4,13 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { FolderOpen, FilePlus, X } from "lucide-react";
 
 const SUPPORTED_EXTENSIONS = [".pdf", ".md", ".markdown", ".txt", ".docx", ".pptx", ".ipynb"] as const;
-const MAX_FILE_BYTES = 20 * 1024 * 1024;
-const MAX_TOTAL_BYTES = 50 * 1024 * 1024;
+
+// Dev-only cap bump for local testing. Must match backend/routers/classes.py.
+// Never set NEXT_PUBLIC_CLASS_UPLOAD_DEV_CAPS=1 in production builds -- the
+// backend default caps will reject the upload and this will just mislead users.
+const DEV_CAPS = process.env.NEXT_PUBLIC_CLASS_UPLOAD_DEV_CAPS === "1";
+const MAX_FILE_BYTES = (DEV_CAPS ? 100 : 20) * 1024 * 1024;
+const MAX_TOTAL_BYTES = (DEV_CAPS ? 500 : 50) * 1024 * 1024;
 
 export interface SelectedFile {
   file: File;
@@ -190,7 +195,7 @@ export default function ClassFolderDrop({ onFilesChanged, disabled }: Props) {
           Drop a class folder here
         </div>
         <div className="text-sm font-medium" style={{ color: "var(--duo-wolf)" }}>
-          or click to pick — PDF, DOCX, PPTX, IPYNB, markdown, and text files up to 20 MB each.
+          or click to pick — PDF, DOCX, PPTX, IPYNB, markdown, and text files up to {MAX_FILE_BYTES / (1024 * 1024)} MB each.
         </div>
         <input
           ref={inputRef}

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 
 from fastapi import (
     APIRouter,
@@ -33,9 +34,14 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-MAX_FILE_BYTES = 20 * 1024 * 1024       # 20 MB per file
-MAX_TOTAL_BYTES = 50 * 1024 * 1024      # 50 MB per upload
-MAX_FILES_PER_UPLOAD = 30
+# Dev-only cap bump for local testing with large class folders (textbooks, etc).
+# Never enable in deployed environments: Azure B1 and similar small hosts will
+# OOM or time out on 100MB+ uploads. Production must rely on the default caps.
+_DEV_CAPS = os.getenv("CLASS_UPLOAD_DEV_CAPS") == "1"
+
+MAX_FILE_BYTES = (100 if _DEV_CAPS else 20) * 1024 * 1024
+MAX_TOTAL_BYTES = (500 if _DEV_CAPS else 50) * 1024 * 1024
+MAX_FILES_PER_UPLOAD = 100 if _DEV_CAPS else 30
 
 
 # ---------------------------------------------------------------------------
