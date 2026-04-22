@@ -192,10 +192,178 @@ class TextParser:
 
 
 # ---------------------------------------------------------------------------
+# DOCX parser
+# ---------------------------------------------------------------------------
+
+class DocxParser:
+    extensions = (".docx",)
+
+    def parse(self, filename: str, data: bytes) -> Iterator[ParsedSegment]:
+        try:
+            import docx  # python-docx
+        except ImportError:
+            logger.error("python-docx not installed; skipping %s", filename)
+            return
+        try:
+            doc = docx.Document(io.BytesIO(data))
+        except Exception as exc:
+            logger.warning("Could not open DOCX %s: %s", filename, exc)
+            return
+
+        # Split into sections when we hit Heading 1/2/3 styles; otherwise
+        # emit one big segment with heading=''. DOCX has no reliable page
+        # concept so page stays 0.
+        current_heading = ""
+        buffer: list[str] = []
+
+        def flush():
+            text = "\n".join(buffer).strip()
+            if text:
+                return ParsedSegment(
+                    filename=filename, page=0,
+                    heading=current_heading, text=text,
+                )
+            return None
+
+        for para in doc.paragraphs:
+            style_name = (para.style.name if para.style else "") or ""
+            text = (para.text or "").strip()
+            if style_name.startswith("Heading"):
+                seg = flush()
+                if seg:
+                    yield seg
+                buffer = []
+                current_heading = text
+                continue
+            if text:
+                buffer.append(text)
+
+        seg = flush()
+        if seg:
+            yield seg
+
+
+# ---------------------------------------------------------------------------
+# PPTX parser
+# ---------------------------------------------------------------------------
+
+class PptxParser:
+    extensions = (".pptx",)
+
+    def parse(self, filename: str, data: bytes) -> Iterator[ParsedSegment]:
+        try:
+            from pptx import Presentation
+        except ImportError:
+            logger.error("python-pptx not installed; skipping %s", filename)
+            return
+        try:
+            prs = Presentation(io.BytesIO(data))
+        except Exception as exc:
+            logger.warning("Could not open PPTX %s: %s", filename, exc)
+            return
+
+        for idx, slide in enumerate(prs.slides, start=1):
+            try:
+                title = ""
+                if slide.shapes.title and slide.shapes.title.text:
+                    title = slide.shapes.title.text.strip()
+
+                parts: list[str] = []
+                for shape in slide.shapes:
+                    # Main text frames
+                    if getattr(shape, "has_text_frame", False) and shape.text_frame:
+                        for para in shape.text_frame.paragraphs:
+                            text = "".join(
+                                run.text for run in para.runs
+                                if getattr(run, "text", None)
+                            ).strip()
+                            if text:
+                                parts.append(text)
+                    # Tables
+                    if getattr(shape, "has_table", False):
+                        for row in shape.table.rows:
+                            row_text = " | ".join(
+                                (cell.text or "").strip() for cell in row.cells
+                            ).strip(" |")
+                            if row_text:
+                                parts.append(row_text)
+
+                # Speaker notes
+                if slide.has_notes_slide and slide.notes_slide:
+                    notes = slide.notes_slide.notes_text_frame
+                    if notes and notes.text:
+                        parts.append(f"Notes: {notes.text.strip()}")
+
+                body = "\n".join(parts).strip()
+                if not body:
+                    continue
+                yield ParsedSegment(
+                    filename=filename,
+                    page=idx,
+                    heading=title,
+                    text=body,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "PPTX slide %d of %s failed: %s", idx, filename, exc)
+                continue
+
+
+# ---------------------------------------------------------------------------
+# IPYNB parser (markdown cells only)
+# ---------------------------------------------------------------------------
+
+class IpynbParser:
+    extensions = (".ipynb",)
+
+    def parse(self, filename: str, data: bytes) -> Iterator[ParsedSegment]:
+        try:
+            import nbformat
+        except ImportError:
+            logger.error("nbformat not installed; skipping %s", filename)
+            return
+        try:
+            text = data.decode("utf-8", errors="replace")
+            nb = nbformat.reads(text, as_version=4)
+        except Exception as exc:
+            logger.warning("Could not read notebook %s: %s", filename, exc)
+            return
+
+        for idx, cell in enumerate(nb.cells):
+            cell_type = getattr(cell, "cell_type", None)
+            # Skip code cells by default to keep chunks to prose concepts.
+            if cell_type != "markdown":
+                continue
+            source = getattr(cell, "source", "") or ""
+            if not source.strip():
+                continue
+            # Promote the first markdown heading (if any) to the heading field.
+            heading = ""
+            for line in source.splitlines():
+                m = _HEADING_RE.match(line)
+                if m:
+                    heading = m.group(2).strip()
+                    break
+            yield ParsedSegment(
+                filename=filename,
+                page=idx,
+                heading=heading,
+                text=source.strip(),
+            )
+
+
+# ---------------------------------------------------------------------------
 # Parser dispatch
 # ---------------------------------------------------------------------------
 
-_PARSERS: list[Parser] = [PdfParser(), MarkdownParser(), TextParser()]
+_PARSERS: list[Parser] = [
+    PdfParser(),
+    MarkdownParser(),
+    TextParser(),
+    DocxParser(),
+    PptxParser(),
+    IpynbParser(),
+]
 
 
 def register_parser(parser: Parser) -> None:

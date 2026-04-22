@@ -13,7 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.db.engine import get_db
-from backend.db.models import FlashcardRow, ReviewRow
+from backend.db.models import ClassChunkRow, FlashcardRow, ReviewRow
 from backend.providers.factory import get_llm_provider
 from backend.services import trainer_engine
 
@@ -35,6 +35,12 @@ class LearnerOut(BaseModel):
     display_name: str
 
 
+class SourceCitation(BaseModel):
+    filename: str
+    page: int
+    heading: str
+
+
 class FlashcardOut(BaseModel):
     id: int
     deck: str
@@ -42,6 +48,7 @@ class FlashcardOut(BaseModel):
     question: str
     reference_answer: str
     difficulty: str
+    source_citation: SourceCitation | None = None
 
 
 class NextCardOut(BaseModel):
@@ -75,6 +82,52 @@ class ProgressOut(BaseModel):
     new: int
     total_cards: int
     recent_reviews: list[dict]
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+async def _fetch_citations(
+    db: AsyncSession, cards: list[FlashcardRow]
+) -> dict[int, SourceCitation]:
+    """For class-deck cards with a source_chunk_id, look up the underlying
+    ClassChunkRow so we can surface (filename, page, heading) in the reveal."""
+    chunk_ids = [
+        c.source_chunk_id for c in cards
+        if c.source_chunk_id and c.deck.startswith("class:")
+    ]
+    if not chunk_ids:
+        return {}
+    result = await db.execute(
+        select(ClassChunkRow).where(ClassChunkRow.id.in_(chunk_ids))
+    )
+    chunks = {row.id: row for row in result.scalars()}
+    citations: dict[int, SourceCitation] = {}
+    for card in cards:
+        if not card.source_chunk_id:
+            continue
+        chunk = chunks.get(card.source_chunk_id)
+        if chunk is None:
+            continue
+        citations[card.id] = SourceCitation(
+            filename=chunk.filename,
+            page=chunk.page,
+            heading=chunk.heading or "",
+        )
+    return citations
+
+
+def _card_out(card: FlashcardRow, citation: SourceCitation | None = None) -> FlashcardOut:
+    return FlashcardOut(
+        id=card.id,
+        deck=card.deck,
+        topic=card.topic,
+        question=card.question,
+        reference_answer=card.reference_answer,
+        difficulty=card.difficulty,
+        source_citation=citation,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -116,15 +169,9 @@ async def next_card(
             card=None, remaining_new=0, remaining_review=remaining_review
         )
 
+    citations = await _fetch_citations(db, [card])
     return NextCardOut(
-        card=FlashcardOut(
-            id=card.id,
-            deck=card.deck,
-            topic=card.topic,
-            question=card.question,
-            reference_answer=card.reference_answer,
-            difficulty=card.difficulty,
-        ),
+        card=_card_out(card, citations.get(card.id)),
         remaining_new=remaining_new,
         remaining_review=remaining_review,
     )
@@ -137,17 +184,8 @@ async def list_cards(
     db: AsyncSession = Depends(get_db),
 ):
     cards = await trainer_engine.list_cards_for_learner(db, learner_id, deck)
-    return [
-        FlashcardOut(
-            id=c.id,
-            deck=c.deck,
-            topic=c.topic,
-            question=c.question,
-            reference_answer=c.reference_answer,
-            difficulty=c.difficulty,
-        )
-        for c in cards
-    ]
+    citations = await _fetch_citations(db, cards)
+    return [_card_out(c, citations.get(c.id)) for c in cards]
 
 
 @router.post("/cards/{card_id}/answer", response_model=AnswerResponse)

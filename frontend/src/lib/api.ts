@@ -186,6 +186,12 @@ export async function generateFeedback(
 /* Trainer (flashcards) API                                           */
 /* ------------------------------------------------------------------ */
 
+export interface SourceCitation {
+  filename: string;
+  page: number;
+  heading: string;
+}
+
 export interface TrainerCard {
   id: number;
   deck: string;
@@ -193,6 +199,7 @@ export interface TrainerCard {
   question: string;
   reference_answer: string;
   difficulty: string;
+  source_citation?: SourceCitation | null;
 }
 
 export interface NextCardResponse {

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Check, X, ChevronRight, Lightbulb } from "lucide-react";
+import { Check, X, ChevronRight, Lightbulb, FileText } from "lucide-react";
 import { submitCardAnswer, type AnswerResponse, type TrainerCard as Card } from "@/lib/api";
 
 interface Props {
@@ -224,6 +224,19 @@ export default function TrainerCard({ card, learnerId, onNext }: Props) {
               >
                 {card.reference_answer}
               </div>
+              {card.source_citation && (
+                <div
+                  className="mt-2 flex items-center gap-1.5 text-[11px] font-semibold"
+                  style={{ color: "var(--duo-hare)" }}
+                >
+                  <FileText className="w-3 h-3" />
+                  <span className="truncate">
+                    From {card.source_citation.filename}
+                    {card.source_citation.page > 0 ? ` · p.${card.source_citation.page}` : ""}
+                    {card.source_citation.heading ? ` · ${card.source_citation.heading}` : ""}
+                  </span>
+                </div>
+              )}
             </div>
           </motion.div>
         )}
