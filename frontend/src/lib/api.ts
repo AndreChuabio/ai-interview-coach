@@ -274,12 +274,139 @@ export async function submitCardAnswer(
 }
 
 export async function getProgress(
-  learnerId: string
+  learnerId: string,
+  deck?: string
 ): Promise<ProgressSummary> {
-  const res = await fetch(
-    `${API_BASE}/trainer/progress?learner_id=${encodeURIComponent(learnerId)}`
-  );
+  const qs = new URLSearchParams({ learner_id: learnerId });
+  if (deck) qs.set("deck", deck);
+  const res = await fetch(`${API_BASE}/trainer/progress?${qs.toString()}`);
   if (!res.ok) throw new Error(`Progress failed: ${res.status}`);
+  return res.json();
+}
+
+/* ------------------------------------------------------------------ */
+/* Class materials API                                                */
+/* ------------------------------------------------------------------ */
+
+export interface ClassSummary {
+  class_id: string;
+  title: string;
+  deck: string;
+  status: string;
+  file_count: number;
+  chunk_count: number;
+  card_count: number;
+  error_message: string;
+}
+
+export interface UploadClassResponse {
+  class_id: string;
+  title: string;
+  deck: string;
+  status: string;
+  file_count: number;
+  chunk_count: number;
+  skipped_files: string[];
+}
+
+export interface ClassStatus {
+  class_id: string;
+  title: string;
+  deck: string;
+  status: string;
+  file_count: number;
+  chunk_count: number;
+  embedded_chunks: number;
+  progress: number;
+  card_count: number;
+  error_message: string;
+}
+
+/** Upload a class: multipart with learner_id, title, and multiple files. */
+export async function uploadClass(
+  learnerId: string,
+  title: string,
+  files: File[],
+  onProgress?: (pct: number) => void
+): Promise<UploadClassResponse> {
+  const fd = new FormData();
+  fd.append("learner_id", learnerId);
+  fd.append("title", title);
+  for (const f of files) {
+    // Preserve folder path if the browser supplied it.
+    const rel = (f as File & { webkitRelativePath?: string })
+      .webkitRelativePath;
+    fd.append("files", f, rel && rel.length > 0 ? rel : f.name);
+  }
+
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `${API_BASE}/classes/upload`);
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && onProgress) {
+        onProgress(e.loaded / e.total);
+      }
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          resolve(JSON.parse(xhr.responseText));
+        } catch {
+          reject(new Error("Upload response was not JSON"));
+        }
+      } else {
+        reject(new Error(`Upload failed (${xhr.status}): ${xhr.responseText}`));
+      }
+    };
+    xhr.onerror = () => reject(new Error("Upload network error"));
+    xhr.send(fd);
+  });
+}
+
+export async function listClasses(learnerId: string): Promise<ClassSummary[]> {
+  const res = await fetch(
+    `${API_BASE}/classes/?learner_id=${encodeURIComponent(learnerId)}`
+  );
+  if (!res.ok) throw new Error(`List classes failed: ${res.status}`);
+  return res.json();
+}
+
+export async function getClassStatus(
+  classId: string,
+  learnerId: string
+): Promise<ClassStatus> {
+  const res = await fetch(
+    `${API_BASE}/classes/${classId}/status?learner_id=${encodeURIComponent(
+      learnerId
+    )}`
+  );
+  if (!res.ok) throw new Error(`Class status failed: ${res.status}`);
+  return res.json();
+}
+
+export async function deleteClass(
+  classId: string,
+  learnerId: string
+): Promise<void> {
+  const res = await fetch(
+    `${API_BASE}/classes/${classId}?learner_id=${encodeURIComponent(learnerId)}`,
+    { method: "DELETE" }
+  );
+  if (!res.ok) throw new Error(`Delete class failed: ${res.status}`);
+}
+
+export async function generateMoreCards(
+  classId: string,
+  learnerId: string,
+  count = 20
+): Promise<ClassStatus> {
+  const res = await fetch(
+    `${API_BASE}/classes/${classId}/generate-cards?learner_id=${encodeURIComponent(
+      learnerId
+    )}&count=${count}`,
+    { method: "POST" }
+  );
+  if (!res.ok) throw new Error(`Generate cards failed: ${res.status}`);
   return res.json();
 }
 

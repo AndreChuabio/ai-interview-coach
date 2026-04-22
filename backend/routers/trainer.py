@@ -195,7 +195,8 @@ async def submit_answer(
 @router.get("/progress", response_model=ProgressOut)
 async def get_progress(
     learner_id: str = Query(..., min_length=8),
+    deck: str | None = Query(None, max_length=64),
     db: AsyncSession = Depends(get_db),
 ):
     await trainer_engine.get_or_create_learner(db, learner_id)
-    return await trainer_engine.progress_summary(db, learner_id)
+    return await trainer_engine.progress_summary(db, learner_id, deck=deck)

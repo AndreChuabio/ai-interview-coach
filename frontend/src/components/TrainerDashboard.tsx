@@ -8,13 +8,19 @@ interface Props {
   progress: ProgressSummary | null;
   onStart: () => void;
   starting: boolean;
+  /** When set (e.g. "this class"), the hero copy narrows to that deck. */
+  scopeLabel?: string;
 }
 
-export default function TrainerDashboard({ progress, onStart, starting }: Props) {
+export default function TrainerDashboard({ progress, onStart, starting, scopeLabel }: Props) {
   const accuracyPct = progress ? Math.round(progress.accuracy * 100) : 0;
   const masteredPct = progress && progress.total_cards > 0
     ? Math.round((progress.mastered / progress.total_cards) * 100)
     : 0;
+  const title = scopeLabel ? "Class Trainer" : "ML Trainer";
+  const subtitle = scopeLabel
+    ? `Short-answer flashcards generated from ${scopeLabel}. Your answers are graded and tracked.`
+    : "Short-answer flashcards on ML fundamentals. Your answers are graded and tracked so weak topics come back.";
 
   return (
     <div className="max-w-2xl mx-auto">
@@ -30,10 +36,10 @@ export default function TrainerDashboard({ progress, onStart, starting }: Props)
           <BookOpen className="w-10 h-10 text-white" />
         </motion.div>
         <h1 className="text-4xl font-extrabold mb-2" style={{ color: "var(--duo-eel)" }}>
-          ML Trainer
+          {title}
         </h1>
         <p className="text-lg font-medium max-w-md mx-auto" style={{ color: "var(--duo-wolf)" }}>
-          Short-answer flashcards on ML fundamentals. Your answers are graded and tracked so weak topics come back.
+          {subtitle}
         </p>
       </div>
 

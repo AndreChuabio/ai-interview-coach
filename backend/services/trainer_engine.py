@@ -223,24 +223,63 @@ async def grade_answer(
 # Progress stats
 # ---------------------------------------------------------------------------
 
-async def progress_summary(db: AsyncSession, learner_id: str) -> dict[str, Any]:
-    """Compute the learner's progress dashboard payload."""
-    all_reviews_stmt = select(ReviewRow).where(
+async def progress_summary(
+    db: AsyncSession,
+    learner_id: str,
+    deck: str | None = None,
+) -> dict[str, Any]:
+    """Compute the learner's progress dashboard payload.
+
+    When ``deck`` is provided, cards and reviews are filtered to that deck
+    so per-class dashboards show class-scoped progress only. Without it,
+    behaves exactly as before for the default ML trainer.
+    """
+    reviews_stmt = select(ReviewRow).where(
         ReviewRow.learner_id == learner_id
-    ).order_by(ReviewRow.reviewed_at.desc())
-    reviews = list((await db.execute(all_reviews_stmt)).scalars())
+    )
+    if deck is not None:
+        # Scope reviews to cards in the requested deck.
+        deck_card_ids = list((await db.execute(
+            select(FlashcardRow.id).where(
+                FlashcardRow.deck == deck,
+                FlashcardRow.learner_id.in_(["", learner_id]),
+            )
+        )).scalars())
+        if deck_card_ids:
+            reviews_stmt = reviews_stmt.where(
+                ReviewRow.card_id.in_(deck_card_ids))
+        else:
+            reviews_stmt = reviews_stmt.where(ReviewRow.card_id.is_(None))
+    reviews_stmt = reviews_stmt.order_by(ReviewRow.reviewed_at.desc())
+    reviews = list((await db.execute(reviews_stmt)).scalars())
 
     total_reviews = len(reviews)
     total_correct = sum(1 for r in reviews if r.grade >= 3)
     accuracy = (total_correct / total_reviews) if total_reviews else 0.0
 
-    cards = await list_cards_for_learner(db, learner_id)
+    if deck is not None:
+        cards_stmt = select(FlashcardRow).where(
+            FlashcardRow.deck == deck,
+            FlashcardRow.learner_id.in_(["", learner_id]),
+        )
+        cards = list((await db.execute(cards_stmt)).scalars())
+    else:
+        cards = await list_cards_for_learner(db, learner_id)
+
     stats = await recent_grade_by_card(db, learner_id)
-    mastered = sum(1 for c in cards if c.id in stats and stats[c.id][0] >= 4)
+    # When filtering by deck, only consider cards in that deck.
+    deck_card_id_set = {c.id for c in cards}
+    scoped_stats = {
+        cid: v for cid, v in stats.items() if cid in deck_card_id_set
+    } if deck is not None else stats
+
+    mastered = sum(
+        1 for c in cards if c.id in scoped_stats and scoped_stats[c.id][0] >= 4)
     learning = sum(
-        1 for c in cards if c.id in stats and 2 <= stats[c.id][0] < 4)
-    struggling = sum(1 for c in cards if c.id in stats and stats[c.id][0] < 2)
-    new_cards = sum(1 for c in cards if c.id not in stats)
+        1 for c in cards if c.id in scoped_stats and 2 <= scoped_stats[c.id][0] < 4)
+    struggling = sum(
+        1 for c in cards if c.id in scoped_stats and scoped_stats[c.id][0] < 2)
+    new_cards = sum(1 for c in cards if c.id not in scoped_stats)
 
     # Study streak: consecutive days (UTC) ending today with >=1 review.
     streak = 0

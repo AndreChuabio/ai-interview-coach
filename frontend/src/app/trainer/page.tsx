@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, BookOpen } from "lucide-react";
 import TrainerDashboard from "@/components/TrainerDashboard";
 import TrainerCard from "@/components/TrainerCard";
 import { getLearnerId } from "@/lib/learner";
@@ -18,7 +19,22 @@ import {
 
 type Phase = "dashboard" | "studying" | "empty";
 
+const DEFAULT_DECK = "ml_fundamentals";
+
 export default function TrainerPage() {
+  return (
+    <Suspense fallback={<main className="min-h-screen" style={{ background: "var(--background)" }} />}>
+      <TrainerInner />
+    </Suspense>
+  );
+}
+
+function TrainerInner() {
+  const searchParams = useSearchParams();
+  const deck = searchParams.get("deck") || DEFAULT_DECK;
+  const isClassDeck = deck.startsWith("class:");
+  const headerTitle = isClassDeck ? "Class Study" : "ML Trainer";
+
   const [learnerId, setLearnerId] = useState<string>("");
   const [phase, setPhase] = useState<Phase>("dashboard");
   const [progress, setProgress] = useState<ProgressSummary | null>(null);
@@ -26,13 +42,12 @@ export default function TrainerPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Initialize learner identity (browser only) and register with backend.
   useEffect(() => {
     const id = getLearnerId();
     setLearnerId(id);
     if (id) {
       registerLearner(id).catch(() => {
-        // Non-fatal: backend still upserts on first real request.
+        /* non-fatal */
       });
     }
   }, []);
@@ -40,13 +55,12 @@ export default function TrainerPage() {
   const refreshProgress = useCallback(async () => {
     if (!learnerId) return;
     try {
-      const p = await getProgress(learnerId);
+      const p = await getProgress(learnerId, isClassDeck ? deck : undefined);
       setProgress(p);
     } catch (err) {
-      // Silent: dashboard will show zero state.
       console.warn("Progress fetch failed", err);
     }
-  }, [learnerId]);
+  }, [learnerId, deck, isClassDeck]);
 
   useEffect(() => {
     refreshProgress();
@@ -55,13 +69,12 @@ export default function TrainerPage() {
   const loadNext = useCallback(async (): Promise<NextCardResponse | null> => {
     if (!learnerId) return null;
     try {
-      const next = await getNextCard(learnerId);
-      return next;
+      return await getNextCard(learnerId, deck);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load next card");
       return null;
     }
-  }, [learnerId]);
+  }, [learnerId, deck]);
 
   const handleStart = async () => {
     if (!learnerId) return;
@@ -97,7 +110,6 @@ export default function TrainerPage() {
 
   return (
     <main className="min-h-screen" style={{ background: "var(--background)" }}>
-      {/* Navbar */}
       <nav className="sticky top-0 z-30 bg-white border-b-2" style={{ borderColor: "var(--duo-polar)" }}>
         <div className="container mx-auto px-4 h-14 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
@@ -105,13 +117,10 @@ export default function TrainerPage() {
               className="w-8 h-8 rounded-xl flex items-center justify-center"
               style={{ background: "var(--duo-purple)" }}
             >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-                <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z" />
-              </svg>
+              <BookOpen className="w-[18px] h-[18px] text-white" />
             </div>
             <span className="text-base font-extrabold" style={{ color: "var(--duo-eel)" }}>
-              ML Trainer
+              {headerTitle}
             </span>
           </div>
           <div className="flex items-center gap-4">
@@ -121,9 +130,16 @@ export default function TrainerPage() {
                 className="text-sm font-bold flex items-center gap-1"
                 style={{ color: "var(--duo-blue)" }}
               >
-                <ArrowLeft className="w-4 h-4" /> Dashboard
+                <ArrowLeft className="w-4 h-4" /> Back
               </button>
             )}
+            <Link
+              href="/trainer/classes"
+              className="text-sm font-bold"
+              style={{ color: "var(--duo-purple-push)" }}
+            >
+              My classes
+            </Link>
             <Link
               href="/"
               className="text-sm font-bold"
@@ -161,7 +177,12 @@ export default function TrainerPage() {
               exit={{ opacity: 0, y: -16 }}
               transition={{ duration: 0.3 }}
             >
-              <TrainerDashboard progress={progress} onStart={handleStart} starting={loading} />
+              <TrainerDashboard
+                progress={progress}
+                onStart={handleStart}
+                starting={loading}
+                scopeLabel={isClassDeck ? "this class" : undefined}
+              />
             </motion.div>
           )}
 
