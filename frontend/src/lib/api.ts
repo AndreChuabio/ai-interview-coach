@@ -326,6 +326,241 @@ export async function getSkillPath(): Promise<{ path: SkillPathSection[] }> {
   return res.json();
 }
 
+/* ------------------------------------------------------------------ */
+/* Trainer (flashcards) API                                           */
+/* ------------------------------------------------------------------ */
+
+export interface SourceCitation {
+  filename: string;
+  page: number;
+  heading: string;
+}
+
+export interface TrainerCard {
+  id: number;
+  deck: string;
+  topic: string;
+  question: string;
+  reference_answer: string;
+  difficulty: string;
+  source_citation?: SourceCitation | null;
+}
+
+export interface NextCardResponse {
+  card: TrainerCard | null;
+  remaining_new: number;
+  remaining_review: number;
+}
+
+export interface AnswerResponse {
+  card_id: number;
+  score: number;
+  grade: number;
+  feedback: string;
+  missing_concepts: string[];
+  reference_answer: string;
+}
+
+export interface ProgressSummary {
+  total_reviews: number;
+  accuracy: number;
+  streak_days: number;
+  mastered: number;
+  learning: number;
+  struggling: number;
+  new: number;
+  total_cards: number;
+  recent_reviews: Array<{
+    card_id: number;
+    grade: number;
+    llm_score: number;
+    reviewed_at: string | null;
+  }>;
+}
+
+export async function registerLearner(
+  learnerId: string,
+  displayName = ""
+): Promise<void> {
+  await fetch(`${API_BASE}/trainer/learner`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ learner_id: learnerId, display_name: displayName }),
+  });
+}
+
+export async function getNextCard(
+  learnerId: string,
+  deck = "ml_fundamentals"
+): Promise<NextCardResponse> {
+  const res = await fetch(
+    `${API_BASE}/trainer/decks/${deck}/next?learner_id=${encodeURIComponent(
+      learnerId
+    )}`
+  );
+  if (!res.ok) throw new Error(`Next card failed: ${res.status}`);
+  return res.json();
+}
+
+export async function submitCardAnswer(
+  cardId: number,
+  learnerId: string,
+  userAnswer: string,
+  timeSpentMs: number
+): Promise<AnswerResponse> {
+  const res = await fetch(`${API_BASE}/trainer/cards/${cardId}/answer`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      learner_id: learnerId,
+      user_answer: userAnswer,
+      time_spent_ms: timeSpentMs,
+    }),
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(`Submit answer failed (${res.status}): ${detail}`);
+  }
+  return res.json();
+}
+
+/** Trainer-side progress summary keyed by learner_id (separate from Duo getProgress). */
+export async function getTrainerProgress(
+  learnerId: string,
+  deck?: string
+): Promise<ProgressSummary> {
+  const qs = new URLSearchParams({ learner_id: learnerId });
+  if (deck) qs.set("deck", deck);
+  const res = await fetch(`${API_BASE}/trainer/progress?${qs.toString()}`);
+  if (!res.ok) throw new Error(`Progress failed: ${res.status}`);
+  return res.json();
+}
+
+/* ------------------------------------------------------------------ */
+/* Class materials API                                                */
+/* ------------------------------------------------------------------ */
+
+export interface ClassSummary {
+  class_id: string;
+  title: string;
+  deck: string;
+  status: string;
+  file_count: number;
+  chunk_count: number;
+  card_count: number;
+  error_message: string;
+}
+
+export interface UploadClassResponse {
+  class_id: string;
+  title: string;
+  deck: string;
+  status: string;
+  file_count: number;
+  chunk_count: number;
+  skipped_files: string[];
+}
+
+export interface ClassStatus {
+  class_id: string;
+  title: string;
+  deck: string;
+  status: string;
+  file_count: number;
+  chunk_count: number;
+  embedded_chunks: number;
+  progress: number;
+  card_count: number;
+  error_message: string;
+}
+
+/** Upload a class: multipart with learner_id, title, and multiple files. */
+export async function uploadClass(
+  learnerId: string,
+  title: string,
+  files: File[],
+  onProgress?: (pct: number) => void
+): Promise<UploadClassResponse> {
+  const fd = new FormData();
+  fd.append("learner_id", learnerId);
+  fd.append("title", title);
+  for (const f of files) {
+    const rel = (f as File & { webkitRelativePath?: string })
+      .webkitRelativePath;
+    fd.append("files", f, rel && rel.length > 0 ? rel : f.name);
+  }
+
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `${API_BASE}/classes/upload`);
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && onProgress) {
+        onProgress(e.loaded / e.total);
+      }
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          resolve(JSON.parse(xhr.responseText));
+        } catch {
+          reject(new Error("Upload response was not JSON"));
+        }
+      } else {
+        reject(new Error(`Upload failed (${xhr.status}): ${xhr.responseText}`));
+      }
+    };
+    xhr.onerror = () => reject(new Error("Upload network error"));
+    xhr.send(fd);
+  });
+}
+
+export async function listClasses(learnerId: string): Promise<ClassSummary[]> {
+  const res = await fetch(
+    `${API_BASE}/classes/?learner_id=${encodeURIComponent(learnerId)}`
+  );
+  if (!res.ok) throw new Error(`List classes failed: ${res.status}`);
+  return res.json();
+}
+
+export async function getClassStatus(
+  classId: string,
+  learnerId: string
+): Promise<ClassStatus> {
+  const res = await fetch(
+    `${API_BASE}/classes/${classId}/status?learner_id=${encodeURIComponent(
+      learnerId
+    )}`
+  );
+  if (!res.ok) throw new Error(`Class status failed: ${res.status}`);
+  return res.json();
+}
+
+export async function deleteClass(
+  classId: string,
+  learnerId: string
+): Promise<void> {
+  const res = await fetch(
+    `${API_BASE}/classes/${classId}?learner_id=${encodeURIComponent(learnerId)}`,
+    { method: "DELETE" }
+  );
+  if (!res.ok) throw new Error(`Delete class failed: ${res.status}`);
+}
+
+export async function generateMoreCards(
+  classId: string,
+  learnerId: string,
+  count = 20
+): Promise<ClassStatus> {
+  const res = await fetch(
+    `${API_BASE}/classes/${classId}/generate-cards?learner_id=${encodeURIComponent(
+      learnerId
+    )}&count=${count}`,
+    { method: "POST" }
+  );
+  if (!res.ok) throw new Error(`Generate cards failed: ${res.status}`);
+  return res.json();
+}
+
 /** Check backend health and active providers. */
 export async function healthCheck(): Promise<{
   status: string;

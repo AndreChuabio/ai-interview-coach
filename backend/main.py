@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.config import settings
-from backend.routers import interview, feedback, user
+from backend.routers import classes, feedback, interview, trainer, user
 
 logging.basicConfig(
     level=logging.INFO,
@@ -37,6 +37,8 @@ logger.info("CORS origins: %s", settings.cors_origins)
 app.include_router(interview.router, prefix="/api/interview", tags=["interview"])
 app.include_router(feedback.router, prefix="/api/feedback", tags=["feedback"])
 app.include_router(user.router, prefix="/api/user", tags=["user"])
+app.include_router(trainer.router, prefix="/api/trainer", tags=["trainer"])
+app.include_router(classes.router, prefix="/api/classes", tags=["classes"])
 
 
 @app.on_event("startup")
@@ -47,6 +49,28 @@ async def startup():
     from backend.db.engine import init_db
     await init_db()
     logger.info("Database tables initialized")
+
+    # 1b. Seed the curated ML flashcard deck if it's empty.
+    try:
+        from backend.services.trainer_engine import seed_curated_deck_if_empty
+        inserted = await seed_curated_deck_if_empty()
+        if inserted:
+            logger.info("Seeded %d curated ML flashcards", inserted)
+    except Exception as exc:
+        logger.warning(
+            "Could not seed curated ML deck (non-fatal): %s", exc)
+
+    # 1c. Re-queue any class ingestions that were mid-pipeline when the
+    #     server was last shut down. Safe to run unconditionally on startup.
+    try:
+        from backend.services.class_ingestion import resume_stuck_classes
+        from backend.routers.classes import _schedule_pipeline
+        resumed = await resume_stuck_classes(_schedule_pipeline)
+        if resumed:
+            logger.info("Re-queued %d stuck class ingestions", resumed)
+    except Exception as exc:
+        logger.warning(
+            "Could not resume stuck class ingestions (non-fatal): %s", exc)
 
     # 2. STT / embedding models are loaded lazily on first request.
     #    Pre-loading them here exceeds the 1.75 GB RAM on Azure B1

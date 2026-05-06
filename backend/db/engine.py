@@ -104,6 +104,22 @@ async def init_db() -> None:
                 text("ALTER TABLE sessions ADD COLUMN topic VARCHAR(256) DEFAULT ''")
             )
 
+        # Trainer flashcards: add source_chunk_id so cards can be traced back
+        # to the ClassChunkRow that grounded their question.
+        def _flashcards_has(column: str):
+            def _inner(sync_conn):
+                inspector = sa_inspect(sync_conn)
+                if "flashcards" not in inspector.get_table_names():
+                    return True
+                return column in [c["name"] for c in inspector.get_columns("flashcards")]
+            return _inner
+
+        has_src = await conn.run_sync(_flashcards_has("source_chunk_id"))
+        if not has_src:
+            await conn.execute(
+                text("ALTER TABLE flashcards ADD COLUMN source_chunk_id INTEGER")
+            )
+
     # user_progress: add sessions_today if table exists but column missing
     try:
         def _check_user_progress_columns(sync_conn):
