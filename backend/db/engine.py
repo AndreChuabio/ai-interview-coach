@@ -88,6 +88,39 @@ async def init_db() -> None:
                     "ALTER TABLE sessions ADD COLUMN agent_messages_json TEXT DEFAULT '[]'")
             )
 
+        # Add practice_mode and topic for quick-practice (Duo-style) feature.
+        def _check_sessions_columns(sync_conn):
+            inspector = sa_inspect(sync_conn)
+            cols = [c["name"] for c in inspector.get_columns("sessions")]
+            return "practice_mode" in cols, "topic" in cols
+
+        has_practice_mode, has_topic = await conn.run_sync(_check_sessions_columns)
+        if not has_practice_mode:
+            await conn.execute(
+                text("ALTER TABLE sessions ADD COLUMN practice_mode VARCHAR(16) DEFAULT ''")
+            )
+        if not has_topic:
+            await conn.execute(
+                text("ALTER TABLE sessions ADD COLUMN topic VARCHAR(256) DEFAULT ''")
+            )
+
+    # user_progress: add sessions_today if table exists but column missing
+    try:
+        def _check_user_progress_columns(sync_conn):
+            inspector = sa_inspect(sync_conn)
+            if "user_progress" not in inspector.get_table_names():
+                return False
+            cols = [c["name"] for c in inspector.get_columns("user_progress")]
+            return "sessions_today" in cols
+
+        has_sessions_today = await conn.run_sync(_check_user_progress_columns)
+        if not has_sessions_today:
+            await conn.execute(
+                text("ALTER TABLE user_progress ADD COLUMN sessions_today INTEGER DEFAULT 0")
+            )
+    except Exception:
+        pass
+
 
 async def get_db() -> AsyncSession:
     """Yield an async database session (for FastAPI dependency injection)."""

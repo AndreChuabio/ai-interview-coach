@@ -125,6 +125,8 @@ class SessionStore:
             row.difficulty = session.difficulty
             row.num_questions = session.num_questions
             row.status = session.status.value
+            row.practice_mode = session.practice_mode or ""
+            row.topic = session.topic or ""
 
             row.set_transcript([e.model_dump(mode="json")
                                for e in session.transcript])
@@ -155,6 +157,8 @@ class SessionStore:
                     difficulty=row.difficulty,
                     num_questions=row.num_questions,
                     status=SessionStatus(row.status),
+                    practice_mode=row.practice_mode or None,
+                    topic=row.topic or None,
                     created_at=row.created_at or datetime.utcnow(),
                     transcript=[TranscriptEntry(**e)
                                 for e in row.get_transcript()],

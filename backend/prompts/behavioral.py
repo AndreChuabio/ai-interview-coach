@@ -17,6 +17,7 @@ Guidelines:
 
 You are interviewing for the role of {role}{company_clause}.
 Difficulty level: {difficulty}.
+{age_instruction}
 """
 
 OPENING_TEMPLATE = """Begin the behavioral interview. Greet the candidate briefly (one sentence),

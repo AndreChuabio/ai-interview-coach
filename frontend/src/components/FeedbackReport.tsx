@@ -35,6 +35,7 @@ import type { FeedbackReport as ReportType } from "@/lib/api";
 interface Props {
   report: ReportType;
   onRestart: () => void;
+  onPracticeTopic?: (topic: string, interviewType: string) => void;
 }
 
 const COLORS = [
@@ -190,7 +191,7 @@ function ScoreRing({
 /* ------------------------------------------------------------------ */
 /*  Main Feedback Report                                                */
 /* ------------------------------------------------------------------ */
-export default function FeedbackReport({ report, onRestart }: Props) {
+export default function FeedbackReport({ report, onRestart, onPracticeTopic }: Props) {
   const radarData = [
     { metric: "Content", value: report.content.overall_score },
     { metric: "Relevance", value: report.content.relevance },
@@ -254,6 +255,16 @@ export default function FeedbackReport({ report, onRestart }: Props) {
           {report.role}
           {report.company ? ` at ${report.company}` : ""}
         </p>
+        {report.xp_earned != null && report.level != null && (
+          <p className="text-sm font-bold mt-2" style={{ color: "var(--duo-green-push)" }}>
+            +{report.xp_earned} XP. Level {report.level}.
+            {report.streak_days != null && report.streak_days > 0 && (
+              <span className="ml-2" style={{ color: "var(--duo-orange)" }}>
+                {report.streak_days}-day streak
+              </span>
+            )}
+          </p>
+        )}
       </motion.div>
 
       {/* Overall Score Trophy Card */}
@@ -500,8 +511,23 @@ export default function FeedbackReport({ report, onRestart }: Props) {
         </ol>
       </motion.div>
 
-      {/* Practice Again */}
-      <div className="text-center">
+      {/* Practice weak skill (recommended) + Practice Again */}
+      <div className="text-center flex flex-col sm:flex-row items-center justify-center gap-4">
+        {report.recommended_topic && report.recommended_interview_type && onPracticeTopic && (
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.97 }}
+            onClick={() => onPracticeTopic(report.recommended_topic!, report.recommended_interview_type!)}
+            className="px-8 py-3 text-base font-bold rounded-2xl transition-colors"
+            style={{
+              background: "var(--duo-orange-light)",
+              color: "var(--duo-orange-push)",
+              border: "2px solid var(--duo-orange)",
+            }}
+          >
+            Practice {report.recommended_topic} (quick)
+          </motion.button>
+        )}
         <motion.button
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.97 }}

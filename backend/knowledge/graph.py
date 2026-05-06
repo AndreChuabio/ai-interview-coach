@@ -277,15 +277,32 @@ class Neo4jManager:
         interview_type: str,
         role: str = "",
         company: str = "",
+        topic: str = "",
         limit: int = 5,
     ) -> list[dict]:
         """
         Retrieve relevant questions using graph relationships.
-        Prioritizes questions linked to the specified company and role,
-        then falls back to type + topic matches.
+        When topic is set (quick practice), prioritizes questions for that topic.
+        Otherwise prioritizes company and role, then falls back to type.
         Times out after 5s to keep startup fast when AuraDB is paused.
         """
         try:
+            # Quick practice: get questions for this topic first
+            if topic:
+                records = await self._run_read_query(
+                    """
+                    MATCH (q:Question)-[:RELATES_TO]->(t:Topic {name: $topic})
+                    WHERE q.interview_type = $interview_type
+                    OPTIONAL MATCH (q)-[:RELATES_TO]->(t2:Topic)
+                    RETURN q.text AS text, q.difficulty AS difficulty,
+                           collect(DISTINCT t2.name) AS topics
+                    LIMIT $limit
+                    """,
+                    interview_type=interview_type, topic=topic, limit=limit,
+                )
+                if records:
+                    return records
+
             # Try company + role specific first
             if company:
                 records = await self._run_read_query(

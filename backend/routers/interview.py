@@ -9,7 +9,9 @@ import base64
 import logging
 
 from cachetools import TTLCache
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, File, Header, HTTPException, UploadFile
+
+from backend.knowledge.seed_data import TOPICS
 
 from backend.db.session_store import session_store
 from backend.models.schemas import (
@@ -55,20 +57,62 @@ async def _get_or_rebuild_agent(session_id: str) -> tuple[InterviewSession, Inte
     return session, agent
 
 
+HEARTS_DAILY_LIMIT = 5
+
+
 @router.post("/start", response_model=InterviewSession)
-async def start_interview(req: InterviewSetupRequest):
+async def start_interview(
+    req: InterviewSetupRequest,
+    x_user_id: str | None = Header(default=None, alias="X-User-Id"),
+):
     """Create a new interview session and return the first question as audio."""
+    if x_user_id and x_user_id.strip():
+        from backend.services.progress_service import get_progress
+        progress = await get_progress(x_user_id.strip())
+        if progress and (progress.get("sessions_today") or 0) >= HEARTS_DAILY_LIMIT:
+            raise HTTPException(
+                status_code=429,
+                detail="Daily limit reached (5 practices). Come back tomorrow.",
+            )
+
+    num_questions = req.num_questions
+    practice_mode = getattr(req, "practice_mode", None) or ""
+    topic = getattr(req, "topic", None)
+    if practice_mode == "quick":
+        num_questions = min(3, max(2, num_questions))
+
+    role = req.role
+    age_bucket: str | None = None
+    age_instruction: str | None = None
+    if x_user_id and x_user_id.strip():
+        from backend.career_paths import PROFESSIONS
+        from backend.services.profile_service import get_profile, get_age_instruction
+        profile = await get_profile(x_user_id.strip())
+        if profile:
+            if profile.get("profession") and profile["profession"] in PROFESSIONS:
+                role = PROFESSIONS[profile["profession"]]["role"]
+            age_bucket = profile.get("age_bucket")
+            if age_bucket:
+                age_instruction = get_age_instruction(age_bucket)
+
     session = InterviewSession(
         interview_type=req.interview_type,
-        role=req.role,
+        role=role,
         company=req.company,
         difficulty=req.difficulty,
-        num_questions=req.num_questions,
+        num_questions=num_questions,
         status=SessionStatus.in_progress,
+        practice_mode=practice_mode or None,
+        topic=topic,
     )
 
     llm = get_llm_provider()
-    agent = InterviewAgent(llm=llm, session=session)
+    agent = InterviewAgent(
+        llm=llm,
+        session=session,
+        age_bucket=age_bucket,
+        age_instruction=age_instruction,
+    )
     _agents[session.session_id] = agent
 
     # Generate the opening question (timeout prevents infinite frontend hang)
@@ -253,3 +297,23 @@ async def get_opening_audio(session_id: str):
         "text": opening_text,
         "audio": f"data:audio/mp3;base64,{audio_b64}",
     }
+
+
+@router.get("/path")
+async def get_skill_path():
+    """
+    Return Duo-style progress path: interview types and their topics.
+    Frontend can show this as a skill tree; all nodes are unlocked for now.
+    """
+    by_type: dict[str, list[str]] = {}
+    for t in TOPICS:
+        cat = t.get("category", "behavioral")
+        if cat not in by_type:
+            by_type[cat] = []
+        by_type[cat].append(t["name"])
+    # Order: behavioral, technical, case_study
+    path = []
+    for it in ("behavioral", "technical", "case_study"):
+        if it in by_type:
+            path.append({"interview_type": it, "topics": by_type[it]})
+    return {"path": path}
